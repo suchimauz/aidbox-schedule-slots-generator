@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
@@ -116,9 +117,10 @@ func (s *SlotGeneratorService) GenerateBatchSlots(ctx context.Context, scheduleI
 func (s *SlotGeneratorService) generateSlotsForSchedule(schedule *domain.ScheduleRule) []domain.Slot {
 	var slots []domain.Slot
 	currentTime := schedule.StartDate
+	slotDuration := time.Duration(schedule.MinutesDuration) * time.Minute
 
 	for currentTime.Before(schedule.EndDate) {
-		slotEndTime := currentTime.Add(schedule.SlotDuration)
+		slotEndTime := currentTime.Add(slotDuration)
 
 		slot := domain.Slot{
 			ScheduleRule: *schedule,
