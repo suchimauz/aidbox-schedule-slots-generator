@@ -1,8 +1,9 @@
 package config
 
 import (
-	"github.com/caarlos0/env/v6"
 	"strings"
+
+	"github.com/caarlos0/env/v6"
 )
 
 type Environment string
@@ -13,6 +14,11 @@ const (
 	EnvStage      Environment = "stage"
 	EnvProduction Environment = "production"
 )
+
+type ConfigBasicClient struct {
+	Username string
+	Password string
+}
 
 type Config struct {
 	App struct {
@@ -30,6 +36,11 @@ type Config struct {
 		URL      string `env:"AIDBOX_URL"`
 		Username string `env:"AIDBOX_USERNAME"`
 		Password string `env:"AIDBOX_PASSWORD"`
+	}
+
+	Auth struct {
+		BasicClientsString string `env:"AUTH_BASIC_CLIENTS" envDefault:"schedule_generator:schedule_generator"`
+		BasicClients       []ConfigBasicClient
 	}
 
 	RabbitMQ struct {
@@ -53,6 +64,21 @@ func NewConfig() (*Config, error) {
 	// Приведение окружения к нижнему регистру для унификации
 	cfg.App.Env = Environment(strings.ToLower(string(cfg.App.Env)))
 
+	// Разделение клиентов Aidbox
+	if cfg.Auth.BasicClients == nil {
+		cfg.Auth.BasicClients = []ConfigBasicClient{}
+	}
+	clientPairs := strings.Split(cfg.Auth.BasicClientsString, ",")
+	for _, pair := range clientPairs {
+		parts := strings.Split(pair, ":")
+		if len(parts) == 2 {
+			cfg.Auth.BasicClients = append(cfg.Auth.BasicClients, ConfigBasicClient{
+				Username: parts[0],
+				Password: parts[1],
+			})
+		}
+	}
+
 	// Настройка значений по умолчанию в зависимости от окружения
 	switch cfg.App.Env {
 	case EnvLocal:
@@ -68,11 +94,7 @@ func NewConfig() (*Config, error) {
 			cfg.RabbitMQ.Enabled = true
 			cfg.Cache.Enabled = true
 		}
-	}
-
-	// Если RabbitMQ включен, автоматически включаем кэш
-	if cfg.RabbitMQ.Enabled {
-		cfg.Cache.Enabled = true
+		cfg.Cache.Enabled = cfg.RabbitMQ.Enabled // Кэш включен только если RabbitMQ включен
 	}
 
 	return cfg, nil
@@ -80,4 +102,8 @@ func NewConfig() (*Config, error) {
 
 func (c *Config) IsLocal() bool {
 	return c.App.Env == EnvLocal
+}
+
+func (c *Config) IsNotLocal() bool {
+	return c.App.Env == EnvDev || c.App.Env == EnvStage || c.App.Env == EnvProduction
 }

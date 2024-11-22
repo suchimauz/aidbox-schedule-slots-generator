@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,10 +12,10 @@ import (
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/adapters/in/rabbitmq"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/adapters/out/aidbox"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/adapters/out/cache"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/adapters/out/logger"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/services"
-	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/logger"
-	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/out"
 )
 
 func main() {
@@ -27,12 +27,12 @@ func main() {
 	}
 
 	// Инициализация логгера с таймзоной
-	logger, err := logger.NewConsoleLogger(cfg.App.Timezone)
+	mainLogger, err := logger.NewConsoleLogger(cfg.App.Timezone)
 	if err != nil {
 		fmt.Printf("Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
-	logger = logger.WithModule("Main")
+	logger := mainLogger.WithModule("Main")
 
 	logger.Info("app.starting", out.LogFields{
 		"version":         cfg.App.Version,
@@ -43,18 +43,23 @@ func main() {
 	})
 
 	// Настройка Gin в зависимости от окружения
-	if cfg.IsProduction() {
+	if cfg.IsNotLocal() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	// Инициализация адаптеров
 	aidboxAdapter := aidbox.NewAidboxAdapter(cfg, logger.WithModule("AidboxAdapter"))
-	cacheAdapter, err := cache.NewLRUCacheAdapter(cfg, logger.WithModule("CacheAdapter"))
-	if err != nil {
-		logger.Error("app.cache.init_failed", out.LogFields{
-			"error": err.Error(),
-		})
-		os.Exit(1)
+
+	var cacheAdapter out.CachePort
+	if cfg.Cache.Enabled {
+		var err error
+		cacheAdapter, err = cache.NewLRUCacheAdapter(cfg, logger.WithModule("CacheAdapter"))
+		if err != nil {
+			logger.Error("app.cache.init_failed", out.LogFields{
+				"error": err.Error(),
+			})
+			os.Exit(1)
+		}
 	}
 
 	// Инициализация сервиса
@@ -73,27 +78,38 @@ func main() {
 	)
 	controller.RegisterRoutes(router)
 
-	// Настройка RabbitMQ слушателя
-	listener, err := rabbitmq.NewAppointmentListener(
-		slotGeneratorService,
-		cfg,
-		logger.WithModule("RabbitMQListener"),
-	)
-	if err != nil {
-		logger.Error("app.rabbitmq.init_failed", out.LogFields{
-			"error": err.Error(),
-		})
-		os.Exit(1)
-	}
+	// Настройка RabbitMQ слушателя только если он включен
+	if cfg.RabbitMQ.Enabled {
+		listener, err := rabbitmq.NewAppointmentListener(
+			slotGeneratorService,
+			cfg,
+			logger.WithModule("RabbitMQListener"),
+		)
+		if err != nil {
+			logger.Error("app.rabbitmq.init_failed", out.LogFields{
+				"error": err.Error(),
+			})
+			os.Exit(1)
+		}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	if err := listener.Start(ctx); err != nil {
-		logger.Error("app.rabbitmq.start_failed", out.LogFields{
-			"error": err.Error(),
-		})
-		os.Exit(1)
+		if err := listener.Start(ctx); err != nil {
+			logger.Error("app.rabbitmq.start_failed", out.LogFields{
+				"error": err.Error(),
+			})
+			os.Exit(1)
+		}
+
+		// Добавляем остановку RabbitMQ в defer
+		defer func() {
+			if err := listener.Stop(); err != nil {
+				logger.Error("app.rabbitmq.stop_failed", out.LogFields{
+					"error": err.Error(),
+				})
+			}
+		}()
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -117,15 +133,6 @@ func main() {
 	logger.Info("app.shutdown.initiated", out.LogFields{
 		"signal": sig.String(),
 	})
-
-	cancel()
-	if err := listener.Stop(); err != nil {
-		logger.Error("app.rabbitmq.stop_failed", out.LogFields{
-			"error": err.Error(),
-		})
-	}
-
-	logger.Info("app.shutdown.completed", nil)
 
 	// Дополнительное логирование для разработки
 	if cfg.IsLocal() {

@@ -9,17 +9,20 @@ import (
 	"github.com/google/uuid"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/in"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
 )
 
 type SlotGeneratorController struct {
 	useCase in.SlotGeneratorUseCase
 	cfg     *config.Config
+	logger  out.LoggerPort
 }
 
-func NewSlotGeneratorController(useCase in.SlotGeneratorUseCase, cfg *config.Config) *SlotGeneratorController {
+func NewSlotGeneratorController(useCase in.SlotGeneratorUseCase, cfg *config.Config, logger out.LoggerPort) *SlotGeneratorController {
 	return &SlotGeneratorController{
 		useCase: useCase,
 		cfg:     cfg,
+		logger:  logger,
 	}
 }
 
@@ -56,13 +59,13 @@ func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 		return
 	}
 
-	startDate, err := time.Parse(time.RFC3339, req.StartDate)
+	_, err = time.Parse(time.RFC3339, req.StartDate)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid start date format"})
 		return
 	}
 
-	endDate, err := time.Parse(time.RFC3339, req.EndDate)
+	_, err = time.Parse(time.RFC3339, req.EndDate)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid end date format"})
 		return
@@ -87,13 +90,13 @@ func (c *SlotGeneratorController) generateBatchSlots(ctx *gin.Context) {
 		return
 	}
 
-	startDate, err := time.Parse(time.RFC3339, req.StartDate)
+	_, err := time.Parse(time.RFC3339, req.StartDate)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid start date format"})
 		return
 	}
 
-	endDate, err := time.Parse(time.RFC3339, req.EndDate)
+	_, err = time.Parse(time.RFC3339, req.EndDate)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid end date format"})
 		return
@@ -117,8 +120,17 @@ func (c *SlotGeneratorController) basicAuth() gin.HandlerFunc {
 			return
 		}
 
-		if subtle.ConstantTimeCompare([]byte(username), []byte(c.cfg.Aidbox.Username)) != 1 ||
-			subtle.ConstantTimeCompare([]byte(password), []byte(c.cfg.Aidbox.Password)) != 1 {
+		// Проверка авторизации для нескольких клиентов
+		authenticated := false
+		for _, client := range c.cfg.Auth.BasicClients {
+			if subtle.ConstantTimeCompare([]byte(username), []byte(client.Username)) == 1 &&
+				subtle.ConstantTimeCompare([]byte(password), []byte(client.Password)) == 1 {
+				authenticated = true
+				break
+			}
+		}
+
+		if !authenticated {
 			ctx.Header("WWW-Authenticate", "Basic realm=Authorization Required")
 			ctx.AbortWithStatus(http.StatusUnauthorized)
 			return

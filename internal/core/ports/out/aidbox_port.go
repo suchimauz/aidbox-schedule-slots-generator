@@ -10,10 +10,10 @@ import (
 
 type AidboxPort interface {
 	// Методы для работы с расписанием
-	GetSchedule(ctx context.Context, scheduleID uuid.UUID) (*domain.Schedule, error)
-	GetSchedules(ctx context.Context, scheduleIDs []uuid.UUID) (map[uuid.UUID]*domain.Schedule, error)
+	GetScheduleRule(ctx context.Context, scheduleRuleID uuid.UUID) (*domain.ScheduleRule, error)
+	GetScheduleRules(ctx context.Context, scheduleRuleIDs []uuid.UUID) (map[uuid.UUID]*domain.ScheduleRule, error)
 
 	// Методы для работы с записями на прием
-	GetAppointments(ctx context.Context, doctorID uuid.UUID, startDate, endDate time.Time) ([]domain.Appointment, error)
+	GetScheduleRuleAppointments(ctx context.Context, scheduleRuleID uuid.UUID, startDate, endDate time.Time) ([]domain.Appointment, error)
 	GetAppointmentByID(ctx context.Context, appointmentID uuid.UUID) (*domain.Appointment, error)
 }

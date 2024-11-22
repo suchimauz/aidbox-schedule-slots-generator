@@ -3,9 +3,9 @@ package services
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
 )
@@ -14,6 +14,7 @@ type SlotGeneratorService struct {
 	aidboxPort out.AidboxPort
 	cachePort  out.CachePort
 	logger     out.LoggerPort
+	cfg        *config.Config
 }
 
 func NewSlotGeneratorService(
@@ -33,7 +34,7 @@ func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, scheduleID uui
 		"scheduleId": scheduleID,
 	})
 
-	schedule, err := s.aidboxPort.GetSchedule(ctx, scheduleID)
+	schedule, err := s.aidboxPort.GetScheduleRule(ctx, scheduleID)
 	if err != nil {
 		s.logger.Error("slots.generate.schedule.fetch_failed", out.LogFields{
 			"scheduleId": scheduleID,
@@ -42,12 +43,15 @@ func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, scheduleID uui
 		return nil, err
 	}
 
-	if slots, exists := s.cachePort.GetSlots(ctx, scheduleID, schedule.StartDate, schedule.EndDate); exists {
-		s.logger.Debug("slots.generate.cache.hit", out.LogFields{
-			"scheduleId": scheduleID,
-			"slotsCount": len(slots),
-		})
-		return slots, nil
+	// Проверяем кэш только если он включен
+	if s.cachePort != nil && s.cfg.Cache.Enabled {
+		if slots, exists := s.cachePort.GetSlots(ctx, scheduleID, schedule.StartDate, schedule.EndDate); exists {
+			s.logger.Debug("slots.generate.cache.hit", out.LogFields{
+				"scheduleId": scheduleID,
+				"slotsCount": len(slots),
+			})
+			return slots, nil
+		}
 	}
 
 	s.logger.Debug("slots.generate.cache.miss", out.LogFields{
@@ -58,22 +62,17 @@ func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, scheduleID uui
 	slots := s.generateSlotsForSchedule(schedule)
 
 	// Получаем и применяем статусы занятости
-	appointments, err := s.aidboxPort.GetAppointments(ctx, schedule.DoctorID, schedule.StartDate, schedule.EndDate)
+	appointments, err := s.aidboxPort.GetScheduleRuleAppointments(ctx, schedule.ID, schedule.StartDate, schedule.EndDate)
 	if err != nil {
 		return nil, err
 	}
 
 	s.applyAppointmentsToSlots(slots, appointments)
 
-	// Сохраняем в кэш
-	s.cachePort.StoreSlots(ctx, scheduleID, slots)
-
-	s.logger.Info("slots.generate.completed", out.LogFields{
-		"scheduleId": scheduleID,
-		"slotsCount": len(slots),
-		"startDate":  schedule.StartDate,
-		"endDate":    schedule.EndDate,
-	})
+	// Сохраняем в кэш только если он включен
+	if s.cachePort != nil && s.cfg.Cache.Enabled {
+		s.cachePort.StoreSlots(ctx, scheduleID, slots)
+	}
 
 	return slots, nil
 }
@@ -114,7 +113,7 @@ func (s *SlotGeneratorService) GenerateBatchSlots(ctx context.Context, scheduleI
 	return result, nil
 }
 
-func (s *SlotGeneratorService) generateSlotsForSchedule(schedule *domain.Schedule) []domain.Slot {
+func (s *SlotGeneratorService) generateSlotsForSchedule(schedule *domain.ScheduleRule) []domain.Slot {
 	var slots []domain.Slot
 	currentTime := schedule.StartDate
 
@@ -122,12 +121,10 @@ func (s *SlotGeneratorService) generateSlotsForSchedule(schedule *domain.Schedul
 		slotEndTime := currentTime.Add(schedule.SlotDuration)
 
 		slot := domain.Slot{
-			ID:         uuid.New(),
-			ScheduleID: schedule.ID,
-			DoctorID:   schedule.DoctorID,
-			StartTime:  currentTime,
-			EndTime:    slotEndTime,
-			Status:     domain.SlotStatusFree,
+			ScheduleRule: *schedule,
+			StartTime:    currentTime,
+			EndTime:      slotEndTime,
+			Status:       domain.SlotStatusFree,
 		}
 
 		slots = append(slots, slot)
@@ -150,4 +147,8 @@ func (s *SlotGeneratorService) applyAppointmentsToSlots(slots []domain.Slot, app
 			}
 		}
 	}
+}
+
+func (s *SlotGeneratorService) UpdateSlotStatus(ctx context.Context, appointmentID uuid.UUID) error {
+	return nil
 }

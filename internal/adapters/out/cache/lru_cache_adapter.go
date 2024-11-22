@@ -2,13 +2,14 @@ package cache
 
 import (
 	"context"
-	"github.com/google/uuid"
-	lru "github.com/hashicorp/golang-lru/v2"
-	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
-	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
-	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/out"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
 )
 
 type CacheEntry struct {
@@ -24,6 +25,13 @@ type LRUCacheAdapter struct {
 }
 
 func NewLRUCacheAdapter(cfg *config.Config, logger out.LoggerPort) (*LRUCacheAdapter, error) {
+	if !cfg.Cache.Enabled {
+		logger.Info("cache.disabled", out.LogFields{
+			"message": "Cache is disabled",
+		})
+		return nil, nil
+	}
+
 	cache, err := lru.New[uuid.UUID, *CacheEntry](cfg.Cache.Size)
 	if err != nil {
 		logger.Error("cache.init.failed", out.LogFields{
@@ -53,11 +61,11 @@ func (c *LRUCacheAdapter) GetSlots(ctx context.Context, scheduleID uuid.UUID, st
 
 	if startDate.Before(entry.StartDate) || endDate.After(entry.EndDate) {
 		c.logger.Debug("cache.get.date_range_mismatch", out.LogFields{
-			"scheduleId":        scheduleID,
-			"requestedStart":    startDate,
-			"requestedEnd":      endDate,
-			"cachedStart":       entry.StartDate,
-			"cachedEnd":         entry.EndDate,
+			"scheduleId":     scheduleID,
+			"requestedStart": startDate,
+			"requestedEnd":   endDate,
+			"cachedStart":    entry.StartDate,
+			"cachedEnd":      entry.EndDate,
 		})
 		return nil, false
 	}
@@ -113,39 +121,22 @@ func (c *LRUCacheAdapter) UpdateSlot(ctx context.Context, scheduleID uuid.UUID, 
 		return
 	}
 
-	// Находим индекс слота в записи кэша
+	// Находим индекс слота в записи кэша по времени
 	index := -1
 	for i, s := range entry.Slots {
-		if s.ID == slot.ID {
+		if s.StartTime.Equal(slot.StartTime) && s.EndTime.Equal(slot.EndTime) {
 			index = i
 			break
 		}
 	}
 
 	if index != -1 {
+		// Обновляем слот
 		entry.Slots[index] = slot
 	}
 
-	// Находим минимальную и максимальную даты
-	startDate := entry.Slots[0].StartTime
-	endDate := entry.Slots[0].EndTime
-	for _, s := range entry.Slots {
-		if s.StartTime.Before(startDate) {
-			startDate = s.StartTime
-		}
-		if s.EndTime.After(endDate) {
-			endDate = s.EndTime
-		}
-	}
-
 	// Обновляем запись в кэше
-	newEntry := &CacheEntry{
-		Slots:     entry.Slots,
-		StartDate: startDate,
-		EndDate:   endDate,
-	}
-
-	c.cache.Add(scheduleID, newEntry)
+	c.cache.Add(scheduleID, entry)
 }
 
 func (c *LRUCacheAdapter) InvalidateCache(ctx context.Context, scheduleID uuid.UUID) {

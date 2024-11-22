@@ -26,6 +26,13 @@ type AppointmentUpdate struct {
 }
 
 func NewAppointmentListener(useCase in.SlotGeneratorUseCase, cfg *config.Config, logger out.LoggerPort) (*AppointmentListener, error) {
+	if !cfg.RabbitMQ.Enabled {
+		logger.Info("rabbitmq.disabled", out.LogFields{
+			"message": "RabbitMQ is disabled, listener will not be started",
+		})
+		return nil, nil
+	}
+
 	conn, err := amqp.Dial(cfg.RabbitMQ.URL)
 	if err != nil {
 		logger.Error("rabbitmq.connect.failed", out.LogFields{
@@ -108,6 +115,10 @@ func (l *AppointmentListener) processMessage(ctx context.Context, msg amqp.Deliv
 }
 
 func (l *AppointmentListener) Stop() error {
+	if l == nil || l.channel == nil {
+		return nil
+	}
+
 	if err := l.channel.Close(); err != nil {
 		return err
 	}
