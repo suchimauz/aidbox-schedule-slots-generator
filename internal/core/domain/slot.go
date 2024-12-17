@@ -2,6 +2,8 @@ package domain
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type SlotStatus string
@@ -12,9 +14,9 @@ const (
 )
 
 type Slot struct {
-	ScheduleRule ScheduleRule
-	StartTime    time.Time
-	EndTime      time.Time
-	Appointment  Appointment
-	Status       SlotStatus
+	StartTime      time.Time              `json:"begin"`
+	EndTime        time.Time              `json:"end"`
+	Week           ScheduleRuleDaysOfWeek `json:"week"`
+	Channel        []ScheduleRuleChannel  `json:"channel"`
+	AppointmentIDS []uuid.UUID            `json:"app"`
 }

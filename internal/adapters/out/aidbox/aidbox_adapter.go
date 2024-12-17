@@ -32,6 +32,65 @@ func NewAidboxAdapter(cfg *config.Config, logger out.LoggerPort) *AidboxAdapter 
 	}
 }
 
+func (a *AidboxAdapter) GetScheduleRuleGlobal(ctx context.Context) (*domain.ScheduleRuleGlobal, error) {
+	a.logger.Info("aidbox.schedule_rule_global.fetch", out.LogFields{})
+
+	url := fmt.Sprintf("%s/ScheduleRuleGlobal", a.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		a.logger.Error("aidbox.schedule_rule_global.fetch_failed", out.LogFields{
+			"error": err.Error(),
+		})
+		return nil, err
+	}
+
+	req.URL.Query().Add("count", "1")
+	req.SetBasicAuth(a.username, a.password)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		a.logger.Error("aidbox.schedule_rule_global.fetch_failed", out.LogFields{
+			"error": err.Error(),
+		})
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		a.logger.Error("aidbox.schedule_rule_global.fetch_failed", out.LogFields{
+			"status": resp.StatusCode,
+		})
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var bundleResponse out.AidboxBundleResponse
+	if err := json.NewDecoder(resp.Body).Decode(&bundleResponse); err != nil {
+		a.logger.Error("aidbox.schedule_rule_global.decode_response_failed", out.LogFields{
+			"error": err.Error(),
+		})
+		return nil, err
+	}
+
+	if len(bundleResponse.Entry) == 0 {
+		a.logger.Error("aidbox.schedule_rule_global.no_entry", out.LogFields{})
+		return nil, nil
+	}
+
+	var scheduleGlobal domain.ScheduleRuleGlobal
+	if err := json.Unmarshal(bundleResponse.Entry[0].Resource, &scheduleGlobal); err != nil {
+		a.logger.Error("aidbox.schedule_rule_global.decode_resource_failed", out.LogFields{
+			"error": err.Error(),
+		})
+		return nil, err
+	}
+
+	a.logger.Debug("aidbox.schedule_rule_global.fetch_success", out.LogFields{
+		"id": scheduleGlobal.ID,
+	})
+
+	return &scheduleGlobal, nil
+}
+
 func (a *AidboxAdapter) GetScheduleRule(ctx context.Context, scheduleID uuid.UUID) (*domain.ScheduleRule, error) {
 	a.logger.Info("aidbox.schedule_rule.fetch", out.LogFields{
 		"scheduleId": scheduleID,
@@ -78,8 +137,8 @@ func (a *AidboxAdapter) GetScheduleRule(ctx context.Context, scheduleID uuid.UUI
 
 	a.logger.Debug("aidbox.schedule_rule.fetch_success", out.LogFields{
 		"scheduleId": scheduleID,
-		"startDate":  schedule.StartDate,
-		"endDate":    schedule.EndDate,
+		"startDate":  schedule.PlanningHorizon.Start,
+		"endDate":    schedule.PlanningHorizon.End,
 	})
 
 	return &schedule, nil

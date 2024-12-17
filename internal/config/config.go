@@ -50,8 +50,8 @@ type Config struct {
 	}
 
 	Cache struct {
-		Enabled bool `env:"CACHE_ENABLED"`
-		Size    int  `env:"CACHE_SIZE" envDefault:"1000"`
+		Enabled   bool `env:"CACHE_ENABLED"`
+		SlotsSize int  `env:"CACHE_SLOTS_SIZE" envDefault:"1000"`
 	}
 }
 
@@ -79,22 +79,9 @@ func NewConfig() (*Config, error) {
 		}
 	}
 
-	// Настройка значений по умолчанию в зависимости от окружения
-	switch cfg.App.Env {
-	case EnvLocal:
-		// В локальном окружении по умолчанию отключаем RabbitMQ и кэш
-		if !cfg.RabbitMQ.Enabled {
-			cfg.RabbitMQ.Enabled = false
-			cfg.Cache.Enabled = false
-		}
-	case EnvDev, EnvStage, EnvProduction:
-		// В остальных окружениях по умолчанию включаем RabbitMQ и кэш,
-		// если явно не указано иное
-		if !cfg.RabbitMQ.Enabled {
-			cfg.RabbitMQ.Enabled = true
-			cfg.Cache.Enabled = true
-		}
-		cfg.Cache.Enabled = cfg.RabbitMQ.Enabled // Кэш включен только если RabbitMQ включен
+	// Если RabbitMQ не включен, то кэш тоже не включаем
+	if !cfg.RabbitMQ.Enabled {
+		cfg.Cache.Enabled = false
 	}
 
 	return cfg, nil

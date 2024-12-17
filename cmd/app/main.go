@@ -53,7 +53,7 @@ func main() {
 	var cacheAdapter out.CachePort
 	if cfg.Cache.Enabled {
 		var err error
-		cacheAdapter, err = cache.NewLRUCacheAdapter(cfg, logger.WithModule("CacheAdapter"))
+		cacheAdapter, err = cache.NewCacheAdapter(cfg, logger.WithModule("CacheAdapter"))
 		if err != nil {
 			logger.Error("app.cache.init_failed", out.LogFields{
 				"error": err.Error(),
@@ -152,8 +152,8 @@ func main() {
 					"queue":   cfg.RabbitMQ.Queue,
 				},
 				"cache": map[string]interface{}{
-					"enabled": cfg.Cache.Enabled,
-					"size":    cfg.Cache.Size,
+					"enabled":    cfg.Cache.Enabled,
+					"slots_size": cfg.Cache.SlotsSize,
 				},
 			},
 		})

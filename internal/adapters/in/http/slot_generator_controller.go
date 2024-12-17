@@ -3,11 +3,11 @@ package http
 import (
 	"crypto/subtle"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/in"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
 )
@@ -16,6 +16,11 @@ type SlotGeneratorController struct {
 	useCase in.SlotGeneratorUseCase
 	cfg     *config.Config
 	logger  out.LoggerPort
+}
+
+type SlotGeneratorResponse struct {
+	ScheduleID uuid.UUID     `json:"scheduleId"`
+	Slots      []domain.Slot `json:"slots"`
 }
 
 func NewSlotGeneratorController(useCase in.SlotGeneratorUseCase, cfg *config.Config, logger out.LoggerPort) *SlotGeneratorController {
@@ -30,20 +35,13 @@ func (c *SlotGeneratorController) RegisterRoutes(router *gin.Engine) {
 	api := router.Group("/api/v1")
 	api.Use(c.basicAuth())
 	{
-		api.POST("/slots/generate/:scheduleId", c.generateSlots)
+		api.GET("/slots/generate/:scheduleId", c.generateSlots)
 		api.POST("/slots/generate-batch", c.generateBatchSlots)
 	}
 }
 
-type GenerateSlotsRequest struct {
-	StartDate string `json:"startDate" binding:"required"`
-	EndDate   string `json:"endDate" binding:"required"`
-}
-
 type GenerateBatchSlotsRequest struct {
 	ScheduleIDs []uuid.UUID `json:"scheduleIds" binding:"required,min=1"`
-	StartDate   string      `json:"startDate" binding:"required"`
-	EndDate     string      `json:"endDate" binding:"required"`
 }
 
 func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
@@ -53,33 +51,20 @@ func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 		return
 	}
 
-	var req GenerateSlotsRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	_, err = time.Parse(time.RFC3339, req.StartDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid start date format"})
-		return
-	}
-
-	_, err = time.Parse(time.RFC3339, req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid end date format"})
-		return
-	}
-
 	slots, err := c.useCase.GenerateSlots(ctx.Request.Context(), scheduleID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
+	c.logger.Debug("slots.generated", out.LogFields{
 		"scheduleId": scheduleID,
-		"slots":      slots,
+		"slotsCount": len(slots),
+	})
+
+	ctx.JSON(http.StatusOK, SlotGeneratorResponse{
+		ScheduleID: scheduleID,
+		Slots:      slots,
 	})
 }
 
@@ -87,18 +72,6 @@ func (c *SlotGeneratorController) generateBatchSlots(ctx *gin.Context) {
 	var req GenerateBatchSlotsRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	_, err := time.Parse(time.RFC3339, req.StartDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid start date format"})
-		return
-	}
-
-	_, err = time.Parse(time.RFC3339, req.EndDate)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid end date format"})
 		return
 	}
 

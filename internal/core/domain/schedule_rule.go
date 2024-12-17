@@ -1,11 +1,10 @@
 package domain
 
 import (
-	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/json_types"
 )
 
 type ScheduleRuleChannel string
@@ -33,6 +32,16 @@ const (
 	ScheduleRuleDaysOfWeekSun ScheduleRuleDaysOfWeek = "sun"
 )
 
+var ScheduleRuleDaysOfWeekMap = map[time.Weekday]ScheduleRuleDaysOfWeek{
+	time.Monday:    ScheduleRuleDaysOfWeekMon,
+	time.Tuesday:   ScheduleRuleDaysOfWeekTue,
+	time.Wednesday: ScheduleRuleDaysOfWeekWed,
+	time.Thursday:  ScheduleRuleDaysOfWeekThu,
+	time.Friday:    ScheduleRuleDaysOfWeekFri,
+	time.Saturday:  ScheduleRuleDaysOfWeekSat,
+	time.Sunday:    ScheduleRuleDaysOfWeekSun,
+}
+
 type ScheduleRuleParity string
 
 const (
@@ -40,37 +49,39 @@ const (
 	ScheduleRuleParityEven ScheduleRuleParity = "even"
 )
 
-type AvailableTime struct {
-	time.Time
-}
-
-func (t *AvailableTime) UnmarshalJSON(data []byte) error {
-	// Убираем кавычки вокруг строки
-	str := string(data[1 : len(data)-1])
-	parsedTime, err := time.Parse("15:04:05", str)
-	if err != nil {
-		return fmt.Errorf("failed to parse time: %v", err)
-	}
-	t.Time = parsedTime
-	return nil
-}
-
-func (t AvailableTime) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.Format("15:04:05"))
-}
-
 type ScheduleRuleAvailableTime struct {
-	StartTime  AvailableTime            `json:"availableStartTime"`
-	EndTime    AvailableTime            `json:"availableEndTime"`
+	StartTime  json_types.Time          `json:"availableStartTime"`
+	EndTime    json_types.Time          `json:"availableEndTime"`
 	Channel    []ScheduleRuleChannel    `json:"channel"`
 	DaysOfWeek []ScheduleRuleDaysOfWeek `json:"daysOfWeek"`
 	Parity     ScheduleRuleParity       `json:"parity"`
 }
 
+type ScheduleRuleNotAvailableTimeDuring struct {
+	Start json_types.Date `json:"start"`
+	End   json_types.Date `json:"end"`
+}
+
+type ScheduleRuleNotAvailableTime struct {
+	During ScheduleRuleNotAvailableTimeDuring `json:"during"`
+}
+
+type ScheduleRulePlanningHorizon struct {
+	Start json_types.DateTime `json:"start"`
+	End   json_types.DateTime `json:"end"`
+}
+
+type ScheduleRulePlanningActive struct {
+	Type     string `json:"type"`
+	Quantity int    `json:"quantity"`
+}
+
 type ScheduleRule struct {
-	ID              uuid.UUID                   `json:"id"`
-	StartDate       time.Time                   `json:"startDate"`
-	EndDate         time.Time                   `json:"endDate"`
-	MinutesDuration int                         `json:"minutesDuration"`
-	AvailableTimes  []ScheduleRuleAvailableTime `json:"availableTime"`
+	ID                 uuid.UUID                      `json:"id"`
+	PlanningHorizon    ScheduleRulePlanningHorizon    `json:"planningHorizon"`
+	MinutesDuration    int                            `json:"minutesDuration"`
+	AvailableTimes     []ScheduleRuleAvailableTime    `json:"availableTime"`
+	NotAvailableTimes  []ScheduleRuleNotAvailableTime `json:"notAvailable"`
+	PlanningActive     ScheduleRulePlanningActive     `json:"planningActive"`
+	IsIgnoreGlobalRule bool                           `json:"ignore-global-rule"`
 }
