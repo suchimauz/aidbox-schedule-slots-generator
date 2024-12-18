@@ -2,7 +2,6 @@ package rabbitmq
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 
 	"github.com/google/uuid"
@@ -106,12 +105,13 @@ func (l *AppointmentListener) Start(ctx context.Context) error {
 }
 
 func (l *AppointmentListener) processMessage(ctx context.Context, msg amqp.Delivery) error {
-	var update AppointmentUpdate
-	if err := json.Unmarshal(msg.Body, &update); err != nil {
-		return err
-	}
+	// var update AppointmentUpdate
+	// if err := json.Unmarshal(msg.Body, &update); err != nil {
+	// 	return err
+	// }
 
-	return l.useCase.UpdateSlotStatus(ctx, update.AppointmentID)
+	// return l.useCase.UpdateSlotStatus(ctx, update.AppointmentID)
+	return nil
 }
 
 func (l *AppointmentListener) Stop() error {

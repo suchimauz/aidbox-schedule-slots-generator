@@ -15,8 +15,8 @@ HTTP_SERVER_PORT ?= 8982
 HTTP_SERVER_HOST ?= localhost
 
 AIDBOX_URL     ?= http://localhost:8080
-AIDBOX_USERNAME ?= dev
-AIDBOX_PASSWORD ?= dev
+AIDBOX_USERNAME ?= slot-generator
+AIDBOX_PASSWORD ?= local
 
 RABBITMQ_ENABLED ?= false
 

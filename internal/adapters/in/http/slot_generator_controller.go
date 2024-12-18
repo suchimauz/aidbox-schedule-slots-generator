@@ -19,8 +19,9 @@ type SlotGeneratorController struct {
 }
 
 type SlotGeneratorResponse struct {
-	ScheduleID uuid.UUID     `json:"scheduleId"`
-	Slots      []domain.Slot `json:"slots"`
+	ScheduleID uuid.UUID          `json:"scheduleId"`
+	Slots      []domain.Slot      `json:"slots"`
+	Debug      []domain.DebugInfo `json:"debug"`
 }
 
 func NewSlotGeneratorController(useCase in.SlotGeneratorUseCase, cfg *config.Config, logger out.LoggerPort) *SlotGeneratorController {
@@ -51,7 +52,9 @@ func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 		return
 	}
 
-	slots, err := c.useCase.GenerateSlots(ctx.Request.Context(), scheduleID)
+	channelParam := ctx.Query("channel")
+
+	slots, debug, err := c.useCase.GenerateSlots(ctx.Request.Context(), scheduleID, channelParam)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -60,11 +63,13 @@ func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 	c.logger.Debug("slots.generated", out.LogFields{
 		"scheduleId": scheduleID,
 		"slotsCount": len(slots),
+		"debug":      debug,
 	})
 
 	ctx.JSON(http.StatusOK, SlotGeneratorResponse{
 		ScheduleID: scheduleID,
 		Slots:      slots,
+		Debug:      debug,
 	})
 }
 
@@ -75,7 +80,9 @@ func (c *SlotGeneratorController) generateBatchSlots(ctx *gin.Context) {
 		return
 	}
 
-	result, err := c.useCase.GenerateBatchSlots(ctx.Request.Context(), req.ScheduleIDs)
+	channelParam := ctx.Query("channel")
+
+	result, err := c.useCase.GenerateBatchSlots(ctx.Request.Context(), req.ScheduleIDs, channelParam)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

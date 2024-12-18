@@ -57,6 +57,15 @@ type ScheduleRuleAvailableTime struct {
 	Parity     ScheduleRuleParity       `json:"parity"`
 }
 
+func (s *ScheduleRuleAvailableTime) ContainsChannel(channel string) bool {
+	for _, c := range s.Channel {
+		if string(c) == channel {
+			return true
+		}
+	}
+	return false
+}
+
 type ScheduleRuleNotAvailableTimeDuring struct {
 	Start json_types.Date `json:"start"`
 	End   json_types.Date `json:"end"`

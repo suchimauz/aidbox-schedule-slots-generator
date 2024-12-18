@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	nurl "net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -189,5 +190,70 @@ func (a *AidboxAdapter) GetAppointmentByID(ctx context.Context, appointmentID uu
 
 // Получение нескольких расписаний по массиву ID
 func (a *AidboxAdapter) GetScheduleRuleAppointments(ctx context.Context, scheduleRuleID uuid.UUID, startDate, endDate time.Time) ([]domain.Appointment, error) {
-	return nil, nil
+	a.logger.Info("aidbox.schedule_rule_appointments.fetch", out.LogFields{})
+
+	url := fmt.Sprintf("%s/ScheduleRule/%s/$appointments", a.baseURL, scheduleRuleID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		a.logger.Error("aidbox.schedule_rule_appointments.fetch_failed", out.LogFields{
+			"error": err.Error(),
+		})
+		return nil, err
+	}
+
+	query := nurl.Values{}
+	query.Add("begin", startDate.Format("2006-01-02T15:04:05"))
+	query.Add("end", endDate.Format("2006-01-02T15:04:05"))
+	query.Add("minify", "true")
+	req.URL.RawQuery = query.Encode()
+
+	req.SetBasicAuth(a.username, a.password)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		a.logger.Error("aidbox.schedule_rule_appointments.fetch_failed", out.LogFields{
+			"error": err.Error(),
+		})
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		a.logger.Error("aidbox.schedule_rule_appointments.fetch_failed", out.LogFields{
+			"status": resp.StatusCode,
+		})
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var bundleResponse out.AidboxBundleResponse
+	if err := json.NewDecoder(resp.Body).Decode(&bundleResponse); err != nil {
+		a.logger.Error("aidbox.schedule_rule_appointments.decode_response_failed", out.LogFields{
+			"error": err.Error(),
+		})
+		return nil, err
+	}
+
+	if len(bundleResponse.Entry) == 0 {
+		a.logger.Info("aidbox.schedule_rule_appointments.no_entry", out.LogFields{})
+		return nil, nil
+	}
+
+	var appointments []domain.Appointment
+
+	for _, entry := range bundleResponse.Entry {
+		var appointment domain.Appointment
+		if err := json.Unmarshal(entry.Resource, &appointment); err != nil {
+			a.logger.Error("aidbox.schedule_rule_appointments.decode_resource_failed", out.LogFields{
+				"error": err.Error(),
+			})
+			return nil, err
+		}
+		appointments = append(appointments, appointment)
+	}
+
+	a.logger.Debug("aidbox.schedule_rule_appointments.fetch_success", out.LogFields{
+		"count": len(appointments),
+	})
+
+	return appointments, nil
 }
