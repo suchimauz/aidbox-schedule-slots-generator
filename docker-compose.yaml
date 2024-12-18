@@ -1,0 +1,44 @@
+version: '3.4'
+
+services:
+  aidbox_schedule_slots_generator_runner:
+    image: aidbox_schedule_slots_generator
+    container_name: aidbox_schedule_slots_generator
+    build:
+      context: .
+      dockerfile: Dockerfile.run
+    entrypoint: ["/bin/sh", "-c", "/dockerfile_run.sh"]
+    environment:
+      APP_VERSION: ${APP_VERSION:-local}
+      APP_ENV: ${APP_ENV:-local}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Moscow}
+      HTTP_SERVER_PORT: ${HTTP_SERVER_PORT:-8982}
+      HTTP_SERVER_HOST: ${HTTP_SERVER_HOST:-0.0.0.0}
+      AIDBOX_URL: http://host.docker.internal:8080
+      AIDBOX_USERNAME: ${AIDBOX_USERNAME:-dev}
+      AIDBOX_PASSWORD: ${AIDBOX_PASSWORD:-dev}
+      RABBITMQ_ENABLED: ${RABBITMQ_ENABLED:-false}
+      CACHE_SIZE:       ${CACHE_SIZE:-1000}
+    ports:
+      - 8982:${HTTP_SERVER_PORT:-8982}
+    volumes:
+      - ./build/schedule-slots-generator/:/schedule-slots-generator
+      - ./dockerfile_run.sh:/dockerfile_run.sh
+
+  aidbox_schedule_slots_generator_builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.build
+    entrypoint: ["/bin/sh", "-c", "/dockerfile_build.sh"]
+    volumes:
+      - ./build:/root/build
+      - ./cmd:/root/cmd
+      - ./internal:/root/internal
+      - ./go.mod:/root/go.mod
+      - ./go.sum:/root/go.sum
+      - ./dockerfile_build.sh:/dockerfile_build.sh
+    environment:
+      VERSION: ${VERSION:-local}
+      BUILD_TIME: ${BUILD_TIME:-local}
+      BINARY_NAME: ${BINARY_NAME:-schedule-slots-generator}
+      BUILD_DIR: ${BUILD_DIR:-build}

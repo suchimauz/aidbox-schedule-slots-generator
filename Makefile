@@ -27,7 +27,8 @@ ifneq ("$(wildcard .env)","")
 endif
 
 .EXPORT_ALL_VARIABLES:
-.PHONY: build run test clean
+.PHONY: build run compose-build compose-build-force compose-run
+.DEFAULT_GOAL := run
 
 build:
 	@echo "Building $(BINARY_NAME)..."
@@ -37,14 +38,15 @@ run: build
 	@echo "Running $(BINARY_NAME)..."
 	@./$(BUILD_DIR)/$(BINARY_NAME)
 
-test:
-	@echo "Running tests..."
-	@go test -v ./...
+compose-build:
+	docker-compose up --remove-orphans aidbox_schedule_slots_generator_builder
 
-clean:
-	@echo "Cleaning up..."
-	@rm -rf $(BUILD_DIR)
-	@echo "Cleanup complete"
+compose-build-force:
+	docker-compose up --build aidbox_schedule_slots_generator_builder
+
+compose-run: compose-build
+	docker-compose up --remove-orphans aidbox_schedule_slots_generator_runner
+
 
 # Вспомогательная команда для просмотра конфигурации
 show-config:
