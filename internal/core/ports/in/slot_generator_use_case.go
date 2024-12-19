@@ -9,8 +9,5 @@ import (
 
 type SlotGeneratorUseCase interface {
 	// Генерация слотов для одного расписания
-	GenerateSlots(ctx context.Context, scheduleID uuid.UUID, channelParam string) ([]domain.Slot, []domain.DebugInfo, error)
-
-	// Генерация слотов для нескольких расписаний
-	GenerateBatchSlots(ctx context.Context, scheduleIDs []uuid.UUID, channelParam string) (map[uuid.UUID][]domain.Slot, error)
+	GenerateSlots(ctx context.Context, scheduleID uuid.UUID, channelParam string) (map[domain.AppointmentType][]domain.Slot, []domain.DebugInfo, error)
 }

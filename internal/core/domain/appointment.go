@@ -23,9 +23,9 @@ const (
 )
 
 type Appointment struct {
-	ID        uuid.UUID           `json:"id"`
-	StartDate json_types.DateTime `json:"start"`
-	EndDate   json_types.DateTime `json:"end"`
-	Status    AppointmentStatus   `json:"status"`
-	Type      AppointmentType     `json:"type"`
+	ID        uuid.UUID                  `json:"id"`
+	StartDate json_types.DateTime        `json:"start"`
+	EndDate   json_types.DateTimeOrEmpty `json:"end"`
+	Status    AppointmentStatus          `json:"status"`
+	Type      AppointmentType            `json:"type"`
 }

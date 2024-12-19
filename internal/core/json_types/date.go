@@ -87,3 +87,30 @@ func (t *Date) UnmarshalJSON(data []byte) error {
 func (t Date) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.Date.Format("2006-01-02"))
 }
+
+type DateTimeOrEmpty struct {
+	Date time.Time
+}
+
+func (t *DateTimeOrEmpty) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		return nil
+	}
+
+	dt := DateTime{}
+	err := dt.UnmarshalJSON(data)
+	if err != nil {
+		return err
+	}
+
+	*t = DateTimeOrEmpty{Date: dt.Date}
+	return nil
+}
+
+func (t DateTimeOrEmpty) MarshalJSON() ([]byte, error) {
+	if t.Date.IsZero() {
+		return json.Marshal(nil)
+	}
+
+	return t.Date.MarshalJSON()
+}

@@ -19,9 +19,9 @@ type SlotGeneratorController struct {
 }
 
 type SlotGeneratorResponse struct {
-	ScheduleID uuid.UUID          `json:"scheduleId"`
-	Slots      []domain.Slot      `json:"slots"`
-	Debug      []domain.DebugInfo `json:"debug"`
+	ScheduleID uuid.UUID                                `json:"scheduleId"`
+	Slots      map[domain.AppointmentType][]domain.Slot `json:"slots"`
+	Debug      []domain.DebugInfo                       `json:"debug"`
 }
 
 func NewSlotGeneratorController(useCase in.SlotGeneratorUseCase, cfg *config.Config, logger out.LoggerPort) *SlotGeneratorController {
@@ -37,7 +37,6 @@ func (c *SlotGeneratorController) RegisterRoutes(router *gin.Engine) {
 	api.Use(c.basicAuth())
 	{
 		api.GET("/slots/generate/:scheduleId", c.generateSlots)
-		api.POST("/slots/generate-batch", c.generateBatchSlots)
 	}
 }
 
@@ -52,9 +51,9 @@ func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 		return
 	}
 
-	channelParam := ctx.Query("channel")
+	channelsParam := ctx.Query("channel")
 
-	slots, debug, err := c.useCase.GenerateSlots(ctx.Request.Context(), scheduleID, channelParam)
+	slots, debug, err := c.useCase.GenerateSlots(ctx.Request.Context(), scheduleID, channelsParam)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -71,24 +70,6 @@ func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 		Slots:      slots,
 		Debug:      debug,
 	})
-}
-
-func (c *SlotGeneratorController) generateBatchSlots(ctx *gin.Context) {
-	var req GenerateBatchSlotsRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	channelParam := ctx.Query("channel")
-
-	result, err := c.useCase.GenerateBatchSlots(ctx.Request.Context(), req.ScheduleIDs, channelParam)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, gin.H{"results": result})
 }
 
 func (c *SlotGeneratorController) basicAuth() gin.HandlerFunc {
