@@ -77,27 +77,23 @@ func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, scheduleID uui
 	}
 	get_schedule_rule_debug.Start()
 
-	schedule, err := s.aidboxPort.GetScheduleRule(ctx, scheduleID)
+	schedule, err := s.getScheduleRule(ctx, scheduleID)
 	if err != nil {
-		s.logger.Error("slots.generate.schedule.fetch_failed", out.LogFields{
-			"scheduleId": scheduleID,
-			"error":      err.Error(),
-		})
-		return nil, nil, fmt.Errorf("slots.generate.schedule.fetch_failed: %w", err)
+		return nil, nil, err
 	}
 	get_schedule_rule_debug.Elapse()
 	debugInfo.AddDebugInfo(get_schedule_rule_debug)
 
 	// Проверяем кэш только если он включен
-	if s.cachePort != nil && s.cfg.Cache.Enabled {
-		if slots, exists := s.cachePort.GetSlots(ctx, scheduleID, schedule.PlanningHorizon.Start.Date, schedule.PlanningHorizon.End.Date); exists {
-			s.logger.Debug("slots.generate.cache.hit", out.LogFields{
-				"scheduleId": scheduleID,
-				"slotsCount": len(slots),
-			})
-			return s.prepareResponseSlots(&debugInfo, slots), debugInfo.data, nil
-		}
-	}
+	// if s.cachePort != nil && s.cfg.Cache.Enabled {
+	// 	if slots, exists := s.cachePort.GetSlots(ctx, scheduleID, schedule.PlanningHorizon.Start.Date, schedule.PlanningHorizon.End.Date); exists {
+	// 		s.logger.Debug("slots.generate.cache.hit", out.LogFields{
+	// 			"scheduleId": scheduleID,
+	// 			"slotsCount": len(slots),
+	// 		})
+	// 		return s.prepareResponseSlots(&debugInfo, slots), debugInfo.data, nil
+	// 	}
+	// }
 
 	s.logger.Debug("slots.generate.cache.miss", out.LogFields{
 		"scheduleId": scheduleID,
@@ -110,16 +106,15 @@ func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, scheduleID uui
 	}
 
 	// Сохраняем в кэш только если он включен
-	if s.cachePort != nil && s.cfg.Cache.Enabled {
-		s.cachePort.StoreSlots(ctx, scheduleID, slots)
-	}
+	// if s.cachePort != nil && s.cfg.Cache.Enabled {
+	// 	s.cachePort.StoreSlots(ctx, scheduleID, slots)
+	// }
 
 	return s.prepareResponseSlots(&debugInfo, slots), debugInfo.data, nil
 }
 
 func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, debugInfo *SlotGeneratorServiceDebug, schedule *domain.ScheduleRule, channels string) ([]domain.Slot, error) {
-	var endTime time.Time
-	var startTime time.Time
+	var startTime, endTime, planningEndTime time.Time
 	var scheduleRuleGlobal *domain.ScheduleRuleGlobal
 
 	slots := make([]domain.Slot, 0)
@@ -158,10 +153,43 @@ func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, deb
 	// Проверяем есть ли вообще планируемый горизонт
 	// Или планируемый активный период заканчивается раньше, чем планируемый горизонт, то используем планируемый активный период
 	if schedule.PlanningHorizon.End.Date.IsZero() || nowPlusPlanningActiveDuration.Before(schedule.PlanningHorizon.End.Date) {
-		endTime = nowPlusPlanningActiveDuration
+		planningEndTime = nowPlusPlanningActiveDuration
 		// Иначе используем планируемый горизонт
 	} else {
-		endTime = schedule.PlanningHorizon.End.Date
+		planningEndTime = schedule.PlanningHorizon.End.Date
+	}
+	endTime = planningEndTime.Add(24 * time.Hour).Truncate(24 * time.Hour)
+
+	cachedRoutineSlots, cachedPlanningEndTime, exists := s.GetSlotsCache(ctx, schedule.ID, startTime, endTime, domain.AppointmentTypeRoutine)
+
+	// Если кэш есть, то начинаем с последнего слота в кэше
+	if exists {
+		s.logger.Debug("slots.generate.cache.hit", out.LogFields{
+			"scheduleId": schedule.ID,
+			"slotsCount": len(cachedRoutineSlots),
+		})
+		get_from_cache_debug := domain.DebugInfo{
+			Event: "slots.generate.cache.get",
+		}
+		get_from_cache_debug.Start()
+
+		slots = cachedRoutineSlots
+		maxCachedEndDate := time.Time{}
+		for _, slot := range cachedRoutineSlots {
+			if slot.EndTime.After(maxCachedEndDate) {
+				maxCachedEndDate = slot.EndTime
+			}
+		}
+		if !maxCachedEndDate.IsZero() {
+			startTime = maxCachedEndDate
+		}
+		get_from_cache_debug.Elapse()
+		debugInfo.AddDebugInfo(get_from_cache_debug)
+
+		// Если в кэше уже есть все слоты до конца периода, то выходим
+		if cachedPlanningEndTime.After(endTime) || cachedPlanningEndTime.Equal(endTime) {
+			return slots, nil
+		}
 	}
 
 	get_appointments_debug := domain.DebugInfo{
@@ -197,6 +225,10 @@ func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, deb
 	s.generateRoutineSlots(schedule, scheduleRuleGlobal, appointments, startTime, endTime, channels, slotDuration, &slots, &mu, &wg)
 	// Ждем завершения всех горутин
 	wg.Wait()
+
+	// Сохраняем в кэш слоты
+	s.cachePort.StoreSlots(ctx, schedule.ID, endTime, slots)
+
 	generate_routine_slots_debug.Elapse()
 
 	generate_walkin_slots_debug.Start()
@@ -216,12 +248,10 @@ func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, deb
 func (s *SlotGeneratorService) getScheduleRuleGlobal(ctx context.Context) (*domain.ScheduleRuleGlobal, error) {
 	var scheduleRuleGlobal *domain.ScheduleRuleGlobal
 
-	// Проверяем, инициализирован ли cachePort
-	if s.cachePort != nil {
-		scheduleRuleGlobal, exists := s.cachePort.GetScheduleRuleGlobal(ctx)
-		if exists {
-			return scheduleRuleGlobal, nil
-		}
+	scheduleRuleGlobal, exists := s.GetScheduleRuleGlobalCache(ctx)
+	if exists {
+		s.logger.Debug("scheduleruleglobal.cache.hit", out.LogFields{})
+		return scheduleRuleGlobal, nil
 	}
 
 	s.logger.Debug("scheduleruleglobal.cache.miss", out.LogFields{})
@@ -232,10 +262,40 @@ func (s *SlotGeneratorService) getScheduleRuleGlobal(ctx context.Context) (*doma
 		return nil, err
 	}
 
-	if s.cachePort != nil {
-		// Сохраняем в кэш
-		s.cachePort.StoreScheduleRuleGlobal(ctx, *scheduleRuleGlobal)
+	scheduleRuleGlobal, err = s.StoreScheduleRuleGlobalCache(ctx, *scheduleRuleGlobal)
+	if err != nil {
+		s.logger.Error("scheduleruleglobal.cache.store_failed", out.LogFields{
+			"error": err.Error(),
+		})
 	}
 
 	return scheduleRuleGlobal, nil
+}
+
+func (s *SlotGeneratorService) getScheduleRule(ctx context.Context, scheduleId uuid.UUID) (*domain.ScheduleRule, error) {
+	scheduleRule, exists := s.GetScheduleRuleCache(ctx, scheduleId)
+	if exists {
+		s.logger.Debug("schedulerule.cache.hit", out.LogFields{
+			"scheduleId": scheduleId,
+		})
+		return scheduleRule, nil
+	}
+
+	s.logger.Debug("schedulerule.cache.miss", out.LogFields{
+		"scheduleId": scheduleId,
+	})
+
+	scheduleRule, err := s.aidboxPort.GetScheduleRule(ctx, scheduleId)
+	if err != nil {
+		return nil, err
+	}
+
+	scheduleRule, err = s.StoreScheduleRuleCache(ctx, *scheduleRule)
+	if err != nil {
+		s.logger.Error("schedulerule.cache.store_failed", out.LogFields{
+			"error": err.Error(),
+		})
+	}
+
+	return scheduleRule, nil
 }

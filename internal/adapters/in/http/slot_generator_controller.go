@@ -59,9 +59,14 @@ func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 		return
 	}
 
+	slotsCount := 0
+	for _, slots := range slots {
+		slotsCount += len(slots)
+	}
+
 	c.logger.Debug("slots.generated", out.LogFields{
 		"scheduleId": scheduleID,
-		"slotsCount": len(slots),
+		"slotsCount": slotsCount,
 		"debug":      debug,
 	})
 

@@ -1,7 +1,6 @@
 package slot_generator_service
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -56,8 +55,6 @@ func isChannelAvailable(availableTime domain.ScheduleRuleAvailableTime, channels
 	if channels == "" {
 		return true
 	}
-
-	fmt.Println("channels", channels)
 
 	splitted_channels := strings.Split(channels, ",")
 	for _, channel := range splitted_channels {

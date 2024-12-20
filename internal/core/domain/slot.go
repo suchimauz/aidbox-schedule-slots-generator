@@ -13,4 +13,5 @@ type Slot struct {
 	Channel        []ScheduleRuleChannel  `json:"channel"`
 	AppointmentIDS []uuid.UUID            `json:"app"`
 	SlotType       AppointmentType        `json:"type"`
+	InCache        bool                   `json:"-"`
 }

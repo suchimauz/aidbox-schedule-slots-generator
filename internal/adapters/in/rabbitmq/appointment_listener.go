@@ -2,11 +2,10 @@ package rabbitmq
 
 import (
 	"context"
-	"log"
 
-	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/in"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
 )
@@ -19,24 +18,28 @@ type AppointmentListener struct {
 	logger  out.LoggerPort
 }
 
-type AppointmentUpdate struct {
-	AppointmentID uuid.UUID `json:"appointmentId"`
-	Action        string    `json:"action"`
-}
+type CacheType string
+
+const (
+	CacheTypeStore      CacheType = "store"
+	CacheTypeInvalidate CacheType = "invalidate"
+)
+
+type AppointmentCacheUpdateMessage domain.Appointment
 
 func NewAppointmentListener(useCase in.SlotGeneratorUseCase, cfg *config.Config, logger out.LoggerPort) (*AppointmentListener, error) {
-	if !cfg.RabbitMQ.Enabled {
+	if !cfg.RabbitMq.Enabled {
 		logger.Info("rabbitmq.disabled", out.LogFields{
 			"message": "RabbitMQ is disabled, listener will not be started",
 		})
 		return nil, nil
 	}
 
-	conn, err := amqp.Dial(cfg.RabbitMQ.URL)
+	conn, err := amqp.Dial(cfg.RabbitMq.AmqpUri)
 	if err != nil {
 		logger.Error("rabbitmq.connect.failed", out.LogFields{
 			"error": err.Error(),
-			"url":   cfg.RabbitMQ.URL,
+			"url":   cfg.RabbitMq.AmqpUri,
 		})
 		return nil, err
 	}
@@ -60,46 +63,46 @@ func NewAppointmentListener(useCase in.SlotGeneratorUseCase, cfg *config.Config,
 }
 
 func (l *AppointmentListener) Start(ctx context.Context) error {
-	queue, err := l.channel.QueueDeclare(
-		l.cfg.RabbitMQ.Queue,
-		true,  // durable
-		false, // delete when unused
-		false, // exclusive
-		false, // no-wait
-		nil,   // arguments
-	)
-	if err != nil {
-		return err
-	}
+	// queue, err := l.channel.QueueDeclare(
+	// 	l.cfg.RabbitMq.QueueConfig.AppointmentQueueName,
+	// 	true,  // durable
+	// 	false, // delete when unused
+	// 	false, // exclusive
+	// 	false, // no-wait
+	// 	nil,   // arguments
+	// )
+	// if err != nil {
+	// 	return err
+	// }
 
-	msgs, err := l.channel.Consume(
-		queue.Name,
-		"",    // consumer
-		false, // auto-ack
-		false, // exclusive
-		false, // no-local
-		false, // no-wait
-		nil,   // args
-	)
-	if err != nil {
-		return err
-	}
+	// msgs, err := l.channel.Consume(
+	// 	queue.Name,
+	// 	"",    // consumer
+	// 	false, // auto-ack
+	// 	false, // exclusive
+	// 	false, // no-local
+	// 	false, // no-wait
+	// 	nil,   // args
+	// )
+	// if err != nil {
+	// 	return err
+	// }
 
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msg := <-msgs:
-				if err := l.processMessage(ctx, msg); err != nil {
-					log.Printf("Error processing message: %v", err)
-					msg.Nack(false, true) // requeue message
-					continue
-				}
-				msg.Ack(false)
-			}
-		}
-	}()
+	// go func() {
+	// 	for {
+	// 		select {
+	// 		case <-ctx.Done():
+	// 			return
+	// 		case msg := <-msgs:
+	// 			if err := l.processMessage(ctx, msg); err != nil {
+	// 				log.Printf("Error processing message: %v", err)
+	// 				msg.Nack(false, true) // requeue message
+	// 				continue
+	// 			}
+	// 			msg.Ack(false)
+	// 		}
+	// 	}
+	// }()
 
 	return nil
 }

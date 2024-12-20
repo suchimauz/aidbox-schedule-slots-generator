@@ -10,14 +10,11 @@ import (
 
 func (s *SlotGeneratorService) generateRoutineSlots(schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, startTime, endTime time.Time, channels string, slotDuration time.Duration, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
 	for currentDayDate := startTime; currentDayDate.Truncate(24 * time.Hour).Before(endTime.Truncate(24 * time.Hour).Add(24 * time.Hour)); currentDayDate = currentDayDate.AddDate(0, 0, 1) {
-		wg.Add(1)
-		go s.generateRoutineSlotsForAvailableTimes(schedule, scheduleRuleGlobal, appointments, currentDayDate, channels, slotDuration, slots, mu, wg)
+		s.generateRoutineSlotsForAvailableTimes(schedule, scheduleRuleGlobal, appointments, currentDayDate, channels, slotDuration, slots, mu, wg)
 	}
 }
 
 func (s *SlotGeneratorService) generateRoutineSlotsForAvailableTimes(schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, currentDayDate time.Time, channels string, slotDuration time.Duration, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
-	defer wg.Done()
-
 	for _, availableTime := range schedule.AvailableTimes {
 		// Проверяем, есть ли канал доступности в настройках промежутка
 		if !isChannelAvailable(availableTime, channels) {
@@ -34,17 +31,12 @@ func (s *SlotGeneratorService) generateRoutineSlotsForAvailableTimes(schedule *d
 			continue
 		}
 
-		// Генерируем слоты в параллельных горутинах
-		wg.Add(1)
-		go s.generateRoutineSlotsForAvailableTime(schedule, scheduleRuleGlobal, appointments, currentDayDate, availableTime, slotDuration, slots, mu, wg)
+		s.generateRoutineSlotsForAvailableTime(schedule, scheduleRuleGlobal, appointments, currentDayDate, availableTime, slotDuration, slots, mu, wg)
 	}
 }
 
 // Функция для генерации слотов в пределах доступного времени
 func (s *SlotGeneratorService) generateRoutineSlotsForAvailableTime(schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, dayDate time.Time, availableTime domain.ScheduleRuleAvailableTime, slotDuration time.Duration, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	// Начинаем с доступного времени
 	slotStartTime := time.Date(dayDate.Year(), dayDate.Month(), dayDate.Day(),
 		availableTime.StartTime.Time.Hour(), availableTime.StartTime.Time.Minute(), 0, 0, dayDate.Location())
 
@@ -52,29 +44,33 @@ func (s *SlotGeneratorService) generateRoutineSlotsForAvailableTime(schedule *do
 	endTime := time.Date(dayDate.Year(), dayDate.Month(), dayDate.Day(),
 		availableTime.EndTime.Time.Hour(), availableTime.EndTime.Time.Minute(), 0, 0, dayDate.Location())
 
-	var slotWg sync.WaitGroup
-
 	// Генерируем слоты в пределах доcтупного времени
 	for slotStartTime.Add(slotDuration).Before(endTime) || slotStartTime.Add(slotDuration).Equal(endTime) {
-		slotWg.Add(1)
-		go s.generateRoutineSlot(schedule, scheduleRuleGlobal, appointments, slotStartTime, availableTime, slotDuration, slots, mu, &slotWg)
+		// Проверяем, нет ли недоступного времени в глобальном расписании
+		// В случае если глобальное расписание не игнорируется
+		globalNotAvailable := false
+		if !schedule.IsIgnoreGlobalRule {
+			globalNotAvailable = isNotAvailableTime(slotStartTime, scheduleRuleGlobal.NotAvailableTimes)
+		}
+		// Проверяем, нет ли недоступного времени в локальном расписании
+		localNotAvailable := isNotAvailableTime(slotStartTime, schedule.NotAvailableTimes)
+
+		// Если слот не доступен в локальном расписании или в глобальном расписании, то не генерируем слот
+		// Если текущее время больше времени слота, то не генерируем слот
+		if slotStartTime.After(time.Now()) && !globalNotAvailable && !localNotAvailable {
+			wg.Add(1)
+			go s.generateRoutineSlot(scheduleRuleGlobal, appointments, slotStartTime, availableTime, slotDuration, slots, mu, wg)
+		}
 		slotStartTime = slotStartTime.Add(slotDuration)
 	}
-
-	slotWg.Wait()
 }
 
 // Обработка каждого отдельного слота
-func (s *SlotGeneratorService) generateRoutineSlot(schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, slotStartTime time.Time, availableTime domain.ScheduleRuleAvailableTime, slotDuration time.Duration, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
+func (s *SlotGeneratorService) generateRoutineSlot(scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, slotStartTime time.Time, availableTime domain.ScheduleRuleAvailableTime, slotDuration time.Duration, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	// Если слот уже прошел, то не добавляем его в результат
-	if slotStartTime.Before(time.Now()) {
-		return
-	}
-
 	startTime := slotStartTime
-	endTime := slotStartTime.Add(slotDuration)
+	endTime := startTime.Add(slotDuration)
 
 	appointmentIDS := s.slotRoutineAppointmentIDS(appointments, startTime, endTime)
 
@@ -88,22 +84,9 @@ func (s *SlotGeneratorService) generateRoutineSlot(schedule *domain.ScheduleRule
 		SlotType:       domain.AppointmentTypeRoutine,
 	}
 
-	// Проверяем, нет ли недоступного времени в глобальном расписании
-	// В случае если глобальное расписание не игнорируется
-	globalNotAvailable := false
-	if !schedule.IsIgnoreGlobalRule {
-		globalNotAvailable = isNotAvailableTime(startTime, scheduleRuleGlobal.NotAvailableTimes)
-	}
-	// Проверяем, нет ли недоступного времени в локальном расписании
-	localNotAvailable := isNotAvailableTime(startTime, schedule.NotAvailableTimes)
-
-	// Если слот не доступен в локальном расписании или в глобальном расписании, то не добавляем слот в результат
-	if !localNotAvailable && !globalNotAvailable {
-		// Добавляем слот в результат
-		mu.Lock()
-		*slots = append(*slots, slot)
-		mu.Unlock()
-	}
+	mu.Lock()
+	*slots = append(*slots, slot)
+	mu.Unlock()
 }
 
 func (s *SlotGeneratorService) slotRoutineAppointmentIDS(appointments []domain.Appointment, startTime, endTime time.Time) []uuid.UUID {

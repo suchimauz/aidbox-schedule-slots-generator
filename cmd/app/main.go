@@ -35,11 +35,13 @@ func main() {
 	logger := mainLogger.WithModule("Main")
 
 	logger.Info("app.starting", out.LogFields{
+		"ampq_uri":        cfg.RabbitMq.AmqpUri,
 		"version":         cfg.App.Version,
 		"env":             cfg.App.Env,
 		"timezone":        cfg.App.Timezone,
-		"rabbitmqEnabled": cfg.RabbitMQ.Enabled,
-		"cacheEnabled":    cfg.Cache.Enabled,
+		"rabbitMqQueue":   cfg.RabbitMq.QueueConfig,
+		"rabbitMqEnabled": cfg.RabbitMq.Enabled,
+		"cache":           cfg.Cache,
 	})
 
 	// Настройка Gin в зависимости от окружения
@@ -79,7 +81,7 @@ func main() {
 	controller.RegisterRoutes(router)
 
 	// Настройка RabbitMQ слушателя только если он включен
-	if cfg.RabbitMQ.Enabled {
+	if cfg.RabbitMq.Enabled {
 		listener, err := rabbitmq.NewAppointmentListener(
 			slotGeneratorService,
 			cfg,
@@ -147,9 +149,9 @@ func main() {
 					"username": cfg.Aidbox.Username,
 				},
 				"rabbitmq": map[string]interface{}{
-					"enabled": cfg.RabbitMQ.Enabled,
-					"url":     cfg.RabbitMQ.URL,
-					"queue":   cfg.RabbitMQ.Queue,
+					"enabled": cfg.RabbitMq.Enabled,
+					"url":     cfg.RabbitMq.AmqpUri,
+					"queue":   cfg.RabbitMq.QueueConfig,
 				},
 				"cache": map[string]interface{}{
 					"enabled":    cfg.Cache.Enabled,
