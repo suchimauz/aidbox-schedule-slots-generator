@@ -8,7 +8,6 @@ import (
 	nurl "net/url"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
@@ -92,7 +91,7 @@ func (a *AidboxAdapter) GetScheduleRuleGlobal(ctx context.Context) (*domain.Sche
 	return &scheduleGlobal, nil
 }
 
-func (a *AidboxAdapter) GetScheduleRule(ctx context.Context, scheduleID uuid.UUID) (*domain.ScheduleRule, error) {
+func (a *AidboxAdapter) GetScheduleRule(ctx context.Context, scheduleID string) (*domain.ScheduleRule, error) {
 	a.logger.Info("aidbox.schedule_rule.fetch", out.LogFields{
 		"scheduleId": scheduleID,
 	})
@@ -146,8 +145,8 @@ func (a *AidboxAdapter) GetScheduleRule(ctx context.Context, scheduleID uuid.UUI
 }
 
 // Получение нескольких расписаний по массиву ID
-func (a *AidboxAdapter) GetScheduleRules(ctx context.Context, scheduleRuleIDs []uuid.UUID) (map[uuid.UUID]*domain.ScheduleRule, error) {
-	schedules := make(map[uuid.UUID]*domain.ScheduleRule)
+func (a *AidboxAdapter) GetScheduleRules(ctx context.Context, scheduleRuleIDs []string) (map[string]*domain.ScheduleRule, error) {
+	schedules := make(map[string]*domain.ScheduleRule)
 
 	for _, id := range scheduleRuleIDs {
 		schedule, err := a.GetScheduleRule(ctx, id)
@@ -161,7 +160,7 @@ func (a *AidboxAdapter) GetScheduleRules(ctx context.Context, scheduleRuleIDs []
 }
 
 // Получение записи на прием по ID
-func (a *AidboxAdapter) GetAppointmentByID(ctx context.Context, appointmentID uuid.UUID) (*domain.Appointment, error) {
+func (a *AidboxAdapter) GetAppointmentByID(ctx context.Context, appointmentID string) (*domain.Appointment, error) {
 	url := fmt.Sprintf("%s/Appointment/%s", a.baseURL, appointmentID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -189,7 +188,7 @@ func (a *AidboxAdapter) GetAppointmentByID(ctx context.Context, appointmentID uu
 }
 
 // Получение нескольких расписаний по массиву ID
-func (a *AidboxAdapter) GetScheduleRuleAppointments(ctx context.Context, scheduleRuleID uuid.UUID, startDate, endDate time.Time) ([]domain.Appointment, error) {
+func (a *AidboxAdapter) GetScheduleRuleAppointments(ctx context.Context, scheduleRuleID string, startDate, endDate time.Time) ([]domain.Appointment, error) {
 	a.logger.Info("aidbox.schedule_rule_appointments.fetch", out.LogFields{})
 
 	url := fmt.Sprintf("%s/ScheduleRule/%s/$appointments", a.baseURL, scheduleRuleID)

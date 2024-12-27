@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
 )
 
@@ -60,10 +59,10 @@ func (s *SlotGeneratorService) generateWalkinSlot(schedule *domain.ScheduleRule,
 	mu.Unlock()
 }
 
-func (s *SlotGeneratorService) slotWalkinAppointmentIDS(appointments []domain.Appointment, startTime, endTime time.Time) []uuid.UUID {
+func (s *SlotGeneratorService) slotWalkinAppointmentIDS(appointments []domain.Appointment, startTime, endTime time.Time) []string {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	ids := make([]uuid.UUID, 0)
+	ids := make([]string, 0)
 
 	for _, appointment := range appointments {
 		if appointment.Type == domain.AppointmentTypeWalkin {
@@ -76,7 +75,7 @@ func (s *SlotGeneratorService) slotWalkinAppointmentIDS(appointments []domain.Ap
 	return ids
 }
 
-func (s *SlotGeneratorService) applyAppointmentToWalkinSlot(appointment domain.Appointment, startTime time.Time, ids *[]uuid.UUID, wg *sync.WaitGroup, mu *sync.Mutex) {
+func (s *SlotGeneratorService) applyAppointmentToWalkinSlot(appointment domain.Appointment, startTime time.Time, ids *[]string, wg *sync.WaitGroup, mu *sync.Mutex) {
 	defer wg.Done()
 
 	slotStart := startTime.Truncate(24 * time.Hour)

@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"github.com/google/uuid"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/json_types"
 )
 
@@ -11,7 +10,7 @@ type ScheduleRuleGlobalReplacement struct {
 }
 
 type ScheduleRuleGlobal struct {
-	ID                uuid.UUID                       `json:"id"`
+	ID                string                          `json:"id"`
 	NotAvailableTimes []ScheduleRuleNotAvailableTime  `json:"notAvailable"`
 	Replacements      []ScheduleRuleGlobalReplacement `json:"replacement"`
 }

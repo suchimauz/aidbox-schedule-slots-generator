@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/in"
@@ -19,7 +18,7 @@ type SlotGeneratorController struct {
 }
 
 type SlotGeneratorResponse struct {
-	ScheduleID uuid.UUID                                `json:"scheduleId"`
+	ScheduleID string                                   `json:"scheduleId"`
 	Slots      map[domain.AppointmentType][]domain.Slot `json:"slots"`
 	Debug      []domain.DebugInfo                       `json:"debug"`
 }
@@ -41,16 +40,11 @@ func (c *SlotGeneratorController) RegisterRoutes(router *gin.Engine) {
 }
 
 type GenerateBatchSlotsRequest struct {
-	ScheduleIDs []uuid.UUID `json:"scheduleIds" binding:"required,min=1"`
+	ScheduleIDs []string `json:"scheduleIds" binding:"required,min=1"`
 }
 
 func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
-	scheduleID, err := uuid.Parse(ctx.Param("scheduleId"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid schedule ID format"})
-		return
-	}
-
+	scheduleID := ctx.Param("scheduleId")
 	channelsParam := ctx.Query("channel")
 
 	slots, debug, err := c.useCase.GenerateSlots(ctx.Request.Context(), scheduleID, channelsParam)

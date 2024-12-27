@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/google/uuid"
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
@@ -12,12 +11,12 @@ import (
 
 type scheduleRuleCache struct {
 	mu    sync.RWMutex
-	cache *lru.Cache[uuid.UUID, *domain.ScheduleRule]
+	cache *lru.Cache[string, *domain.ScheduleRule]
 }
 
 // Кэширование расписаний
 
-func (c *CacheAdapter) GetScheduleRule(ctx context.Context, scheduleID uuid.UUID) (*domain.ScheduleRule, bool) {
+func (c *CacheAdapter) GetScheduleRule(ctx context.Context, scheduleID string) (*domain.ScheduleRule, bool) {
 	c.scheduleRuleCache.mu.RLock()
 	defer c.scheduleRuleCache.mu.RUnlock()
 
@@ -39,7 +38,7 @@ func (c *CacheAdapter) StoreScheduleRule(ctx context.Context, scheduleRule domai
 	c.scheduleRuleCache.cache.Add(scheduleRule.ID, &scheduleRule)
 }
 
-func (c *CacheAdapter) InvalidateScheduleRuleCache(ctx context.Context, scheduleID uuid.UUID) {
+func (c *CacheAdapter) InvalidateScheduleRuleCache(ctx context.Context, scheduleID string) {
 	c.scheduleRuleCache.mu.Lock()
 	defer c.scheduleRuleCache.mu.Unlock()
 

@@ -82,7 +82,7 @@ func main() {
 
 	// Настройка RabbitMQ слушателя только если он включен
 	if cfg.RabbitMq.Enabled {
-		listener, err := rabbitmq.NewAppointmentListener(
+		listener, err := rabbitmq.NewCacheHitListener(
 			slotGeneratorService,
 			cfg,
 			logger.WithModule("RabbitMQListener"),

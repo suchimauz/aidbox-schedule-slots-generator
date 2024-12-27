@@ -3,7 +3,6 @@ package cache
 import (
 	"time"
 
-	"github.com/google/uuid"
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
@@ -25,7 +24,7 @@ func NewCacheAdapter(cfg *config.Config, logger out.LoggerPort) (*CacheAdapter, 
 		return nil, nil
 	}
 
-	lruSlotsCache, err := lru.New[uuid.UUID, *slotsCacheEntry](cfg.Cache.SlotsSize)
+	lruSlotsCache, err := lru.New[string, *slotsCacheEntry](cfg.Cache.SlotsSize)
 	if err != nil {
 		logger.Error("cache.slots.init.failed", out.LogFields{
 			"error": err.Error(),
@@ -43,7 +42,7 @@ func NewCacheAdapter(cfg *config.Config, logger out.LoggerPort) (*CacheAdapter, 
 		ticker: time.NewTicker(time.Minute), // Проверка каждую минуту
 	}
 
-	lruScheduleRuleCache, err := lru.New[uuid.UUID, *domain.ScheduleRule](cfg.Cache.ScheduleRuleSize)
+	lruScheduleRuleCache, err := lru.New[string, *domain.ScheduleRule](cfg.Cache.ScheduleRuleSize)
 	if err != nil {
 		logger.Error("cache.schedule_rule.init.failed", out.LogFields{
 			"error": err.Error(),

@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
 )
 
@@ -89,10 +88,10 @@ func (s *SlotGeneratorService) generateRoutineSlot(scheduleRuleGlobal *domain.Sc
 	mu.Unlock()
 }
 
-func (s *SlotGeneratorService) slotRoutineAppointmentIDS(appointments []domain.Appointment, startTime, endTime time.Time) []uuid.UUID {
+func (s *SlotGeneratorService) slotRoutineAppointmentIDS(appointments []domain.Appointment, startTime, endTime time.Time) []string {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	ids := make([]uuid.UUID, 0)
+	ids := make([]string, 0)
 
 	for _, appointment := range appointments {
 		if appointment.Type == domain.AppointmentTypeRoutine {
@@ -105,7 +104,7 @@ func (s *SlotGeneratorService) slotRoutineAppointmentIDS(appointments []domain.A
 	return ids
 }
 
-func (s *SlotGeneratorService) applyAppointmentToRoutineSlot(appointment domain.Appointment, startTime, endTime time.Time, ids *[]uuid.UUID, wg *sync.WaitGroup, mu *sync.Mutex) {
+func (s *SlotGeneratorService) applyAppointmentToRoutineSlot(appointment domain.Appointment, startTime, endTime time.Time, ids *[]string, wg *sync.WaitGroup, mu *sync.Mutex) {
 	defer wg.Done()
 
 	slotStart := startTime

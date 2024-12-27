@@ -75,14 +75,17 @@ type (
 	}
 
 	RabbitMqQueueConfig struct {
-		ScheduleRuleQueueName string `envconfig:"RABBITMQ_QUEUE_SCHEDULERULE_NAME" default:"slot-generator.schedulerule.cache"`
-		ScheduleRuleQueueBind string `envconfig:"RABBITMQ_QUEUE_SCHEDULERULE_BIND"`
+		AllQueueExchange string `envconfig:"RABBITMQ_QUEUE_ALL_EXCHANGE" default:"aidbox.slot-generator-svc.topic"`
+		AllQueueName     string `envconfig:"RABBITMQ_QUEUE_ALL_NAME" default:"slot-generator-svc.cache._all_"`
+		AllQueueBind     string `envconfig:"RABBITMQ_QUEUE_ALL_BIND" default:"*.slot-generator-svc._all_.#"`
 
-		ScheduleRuleGlobalQueueName string `envconfig:"RABBITMQ_QUEUE_SCHEDULERULEGLOBAL_NAME" default:"slot-generator.scheduleruleglobal.cache"`
-		ScheduleRuleGlobalQueueBind string `envconfig:"RABBITMQ_QUEUE_SCHEDULERULEGLOBAL_BIND"`
+		ScheduleRuleQueueExchange string `envconfig:"RABBITMQ_QUEUE_SCHEDULERULE_EXCHANGE" default:"aidbox.slot-generator-svc.topic"`
+		ScheduleRuleQueueName     string `envconfig:"RABBITMQ_QUEUE_SCHEDULERULE_NAME" default:"slot-generator-svc.cache.schedulerule"`
+		ScheduleRuleQueueBind     string `envconfig:"RABBITMQ_QUEUE_SCHEDULERULE_BIND" default:"*.slot-generator-svc.schedulerule.#"`
 
-		AppointmentQueueName string `envconfig:"RABBITMQ_QUEUE_APPOINTMENT_NAME" default:"slot-generator.appointment.cache"`
-		AppointmentQueueBind string `envconfig:"RABBITMQ_QUEUE_APPOINTMENT_BIND"`
+		AppointmentQueueExchange string `envconfig:"RABBITMQ_QUEUE_APPOINTMENT_EXCHANGE" default:"aidbox.slot-generator-svc.topic"`
+		AppointmentQueueName     string `envconfig:"RABBITMQ_QUEUE_APPOINTMENT_NAME" default:"slot-generator-svc.cache.appointment"`
+		AppointmentQueueBind     string `envconfig:"RABBITMQ_QUEUE_APPOINTMENT_BIND" default:"*.slot-generator-svc.appointment.#"`
 	}
 )
 
@@ -177,11 +180,11 @@ func (qcfg *RabbitMqQueueConfig) validate() error {
 	if qcfg.ScheduleRuleQueueBind == "" {
 		return errors.New("RABBITMQ_QUEUE_SCHEDULERULE_BIND is required")
 	}
-	if qcfg.ScheduleRuleGlobalQueueName == "" {
-		return errors.New("RABBITMQ_QUEUE_SCHEDULERULEGLOBAL_NAME is required")
+	if qcfg.AllQueueName == "" {
+		return errors.New("RABBITMQ_QUEUE_ALL_NAME is required")
 	}
-	if qcfg.ScheduleRuleGlobalQueueBind == "" {
-		return errors.New("RABBITMQ_QUEUE_SCHEDULERULEGLOBAL_BIND is required")
+	if qcfg.AllQueueBind == "" {
+		return errors.New("RABBITMQ_QUEUE_ALL_BIND is required")
 	}
 	if qcfg.AppointmentQueueName == "" {
 		return errors.New("RABBITMQ_QUEUE_APPOINTMENT_NAME is required")

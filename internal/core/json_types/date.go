@@ -9,9 +9,9 @@ import (
 func parseDate(str string) (time.Time, error) {
 	parsedDate, err := time.Parse(time.RFC3339, str)
 	// Если не удалось пробуем дату со временем, но без таймзоны
-	// По дефолту ставим МСК для дат без таймзоны
+	// По дефолту ставим UTC+3 для дат без таймзоны
 	if err != nil {
-		location := time.FixedZone("Europe/Moscow", 3*60*60)
+		location := time.FixedZone("UTC+3", 3*60*60)
 		parsedDate, err = time.ParseInLocation("2006-01-02T15:04:05", str, location)
 		if err != nil {
 			// Если не удалось, пробуем как дату без времени

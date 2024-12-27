@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
@@ -64,7 +63,7 @@ func (s *SlotGeneratorService) prepareResponseSlots(debugInfo *SlotGeneratorServ
 	}
 }
 
-func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, scheduleID uuid.UUID, channelsParam string) (map[domain.AppointmentType][]domain.Slot, []domain.DebugInfo, error) {
+func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, scheduleID string, channelsParam string) (map[domain.AppointmentType][]domain.Slot, []domain.DebugInfo, error) {
 	debugInfo := SlotGeneratorServiceDebug{
 		data: make([]domain.DebugInfo, 0),
 	}
@@ -161,9 +160,10 @@ func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, deb
 	endTime = planningEndTime.Add(24 * time.Hour).Truncate(24 * time.Hour)
 
 	cachedRoutineSlots, cachedPlanningEndTime, exists := s.GetSlotsCache(ctx, schedule.ID, startTime, endTime, domain.AppointmentTypeRoutine)
+	cachedWalkinSlots, cachedPlanningEndTime, exists := s.GetSlotsCache(ctx, schedule.ID, startTime, endTime, domain.AppointmentTypeWalkin)
 
 	// Если кэш есть, то начинаем с последнего слота в кэше
-	if exists {
+	if exists && (cachedPlanningEndTime.After(endTime) || cachedPlanningEndTime.Equal(endTime)) {
 		s.logger.Debug("slots.generate.cache.hit", out.LogFields{
 			"scheduleId": schedule.ID,
 			"slotsCount": len(cachedRoutineSlots),
@@ -174,22 +174,18 @@ func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, deb
 		get_from_cache_debug.Start()
 
 		slots = cachedRoutineSlots
-		maxCachedEndDate := time.Time{}
-		for _, slot := range cachedRoutineSlots {
-			if slot.EndTime.After(maxCachedEndDate) {
-				maxCachedEndDate = slot.EndTime
-			}
-		}
-		if !maxCachedEndDate.IsZero() {
-			startTime = maxCachedEndDate
-		}
+
+		s.logger.Info("slots.generate.cache.get", out.LogFields{
+			"routineLength": len(cachedRoutineSlots),
+			"walkinLength":  len(cachedWalkinSlots),
+		})
+
+		slots = append(slots, cachedWalkinSlots...)
+
 		get_from_cache_debug.Elapse()
 		debugInfo.AddDebugInfo(get_from_cache_debug)
 
-		// Если в кэше уже есть все слоты до конца периода, то выходим
-		if cachedPlanningEndTime.After(endTime) || cachedPlanningEndTime.Equal(endTime) {
-			return slots, nil
-		}
+		return slots, nil
 	}
 
 	get_appointments_debug := domain.DebugInfo{
@@ -226,8 +222,10 @@ func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, deb
 	// Ждем завершения всех горутин
 	wg.Wait()
 
-	// Сохраняем в кэш слоты
-	s.cachePort.StoreSlots(ctx, schedule.ID, endTime, slots)
+	routineSlotsLen := len(slots)
+	s.logger.Info("slots.generate.routine_slots.generated", out.LogFields{
+		"length": routineSlotsLen,
+	})
 
 	generate_routine_slots_debug.Elapse()
 
@@ -238,6 +236,13 @@ func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, deb
 	// Ждем завершения всех горутин
 	wg.Wait()
 	generate_walkin_slots_debug.Elapse()
+
+	s.logger.Info("slots.generate.walkin_slots.generated", out.LogFields{
+		"length": len(slots) - routineSlotsLen,
+	})
+
+	// Сохраняем в кэш слоты
+	s.cachePort.StoreSlots(ctx, schedule.ID, endTime, slots)
 
 	debugInfo.AddDebugInfo(generate_routine_slots_debug)
 	debugInfo.AddDebugInfo(generate_walkin_slots_debug)
@@ -272,7 +277,7 @@ func (s *SlotGeneratorService) getScheduleRuleGlobal(ctx context.Context) (*doma
 	return scheduleRuleGlobal, nil
 }
 
-func (s *SlotGeneratorService) getScheduleRule(ctx context.Context, scheduleId uuid.UUID) (*domain.ScheduleRule, error) {
+func (s *SlotGeneratorService) getScheduleRule(ctx context.Context, scheduleId string) (*domain.ScheduleRule, error) {
 	scheduleRule, exists := s.GetScheduleRuleCache(ctx, scheduleId)
 	if exists {
 		s.logger.Debug("schedulerule.cache.hit", out.LogFields{

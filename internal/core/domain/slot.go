@@ -2,8 +2,6 @@ package domain
 
 import (
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type Slot struct {
@@ -11,7 +9,7 @@ type Slot struct {
 	EndTime        time.Time              `json:"end"`
 	Week           ScheduleRuleDaysOfWeek `json:"week"`
 	Channel        []ScheduleRuleChannel  `json:"channel"`
-	AppointmentIDS []uuid.UUID            `json:"app"`
+	AppointmentIDS []string               `json:"app"`
 	SlotType       AppointmentType        `json:"type"`
 	InCache        bool                   `json:"-"`
 }

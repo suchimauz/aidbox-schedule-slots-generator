@@ -3,7 +3,6 @@ package domain
 import (
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/json_types"
 )
 
@@ -76,8 +75,8 @@ type ScheduleRuleNotAvailableTime struct {
 }
 
 type ScheduleRulePlanningHorizon struct {
-	Start json_types.DateTime `json:"start"`
-	End   json_types.DateTime `json:"end"`
+	Start json_types.DateTimeOrEmpty `json:"start"`
+	End   json_types.DateTimeOrEmpty `json:"end"`
 }
 
 type ScheduleRulePlanningActive struct {
@@ -86,7 +85,7 @@ type ScheduleRulePlanningActive struct {
 }
 
 type ScheduleRule struct {
-	ID                 uuid.UUID                      `json:"id"`
+	ID                 string                         `json:"id"`
 	PlanningHorizon    ScheduleRulePlanningHorizon    `json:"planningHorizon"`
 	MinutesDuration    int                            `json:"minutesDuration"`
 	AvailableTimes     []ScheduleRuleAvailableTime    `json:"availableTime"`
