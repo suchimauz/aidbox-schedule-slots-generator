@@ -7,19 +7,14 @@ import (
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
 )
 
-func (s *SlotGeneratorService) generateRoutineSlots(schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, startTime, endTime time.Time, channels string, slotDuration time.Duration, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
-	for currentDayDate := startTime; currentDayDate.Truncate(24 * time.Hour).Before(endTime.Truncate(24 * time.Hour).Add(24 * time.Hour)); currentDayDate = currentDayDate.AddDate(0, 0, 1) {
-		s.generateRoutineSlotsForAvailableTimes(schedule, scheduleRuleGlobal, appointments, currentDayDate, channels, slotDuration, slots, mu, wg)
+func (s *SlotGeneratorService) generateRoutineSlots(schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, startTime, endTime time.Time, slotDuration time.Duration, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
+	for currentDayDate := startTime; currentDayDate.Truncate(24 * time.Hour).Before(endTime); currentDayDate = currentDayDate.AddDate(0, 0, 1) {
+		s.generateRoutineSlotsForAvailableTimes(schedule, scheduleRuleGlobal, appointments, currentDayDate, slotDuration, slots, mu, wg)
 	}
 }
 
-func (s *SlotGeneratorService) generateRoutineSlotsForAvailableTimes(schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, currentDayDate time.Time, channels string, slotDuration time.Duration, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
+func (s *SlotGeneratorService) generateRoutineSlotsForAvailableTimes(schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, currentDayDate time.Time, slotDuration time.Duration, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
 	for _, availableTime := range schedule.AvailableTimes {
-		// Проверяем, есть ли канал доступности в настройках промежутка
-		if !isChannelAvailable(availableTime, channels) {
-			continue
-		}
-
 		// Проверяем, попадает ли текущий день в доступные дни
 		if !isDayAvailable(currentDayDate, availableTime) {
 			continue

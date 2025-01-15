@@ -8,7 +8,7 @@ import (
 
 type SlotGeneratorUseCase interface {
 	// Генерация слотов для одного расписания
-	GenerateSlots(ctx context.Context, scheduleID string, channelParam string) (map[domain.AppointmentType][]domain.Slot, []domain.DebugInfo, error)
+	GenerateSlots(ctx context.Context, scheduleID string, channelParam string, generateSlotsCount int, with50PercentRule bool) (map[domain.AppointmentType][]domain.Slot, []domain.DebugInfo, error)
 
 	// Кэширование слотов
 	StoreAppointmentCacheSlot(ctx context.Context, scheduleID string, appointment domain.Appointment) error

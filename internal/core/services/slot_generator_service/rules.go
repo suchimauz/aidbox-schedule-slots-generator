@@ -2,7 +2,6 @@ package slot_generator_service
 
 import (
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
@@ -48,20 +47,4 @@ func isTimeAvailable(currentTime time.Time, availableTime domain.ScheduleRuleAva
 	start := availableTime.StartTime.Time
 	end := availableTime.EndTime.Time
 	return (currentTime.After(start) || currentTime.Equal(start)) && (currentTime.Before(end) || currentTime.Equal(end))
-}
-
-// Функция для проверки доступности канала
-func isChannelAvailable(availableTime domain.ScheduleRuleAvailableTime, channels string) bool {
-	if channels == "" {
-		return true
-	}
-
-	splitted_channels := strings.Split(channels, ",")
-	for _, channel := range splitted_channels {
-		if availableTime.ContainsChannel(channel) {
-			return true
-		}
-	}
-
-	return false
 }

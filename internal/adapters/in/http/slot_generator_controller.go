@@ -3,6 +3,7 @@ package http
 import (
 	"crypto/subtle"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
@@ -46,8 +47,24 @@ type GenerateBatchSlotsRequest struct {
 func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 	scheduleID := ctx.Param("scheduleId")
 	channelsParam := ctx.Query("channel")
+	with50PercentRule := ctx.Query("with_50_percent_rule") == "true"
 
-	slots, debug, err := c.useCase.GenerateSlots(ctx.Request.Context(), scheduleID, channelsParam)
+	var generateSlotsCount int
+	var err error
+	generateSlotsCountParam := ctx.Query("slots_count")
+	if generateSlotsCountParam == "" {
+		// Если параметр пустой, устанавливаем количество как неограниченное
+		generateSlotsCount = -1 // Используем -1 для обозначения неограниченного количества
+	} else {
+		generateSlotsCount, err = strconv.Atoi(generateSlotsCountParam)
+		if err != nil {
+			// Обработка ошибки, если преобразование не удалось
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid slots_count query parameter, must be integer"})
+			return
+		}
+	}
+
+	slots, debug, err := c.useCase.GenerateSlots(ctx.Request.Context(), scheduleID, channelsParam, generateSlotsCount, with50PercentRule)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

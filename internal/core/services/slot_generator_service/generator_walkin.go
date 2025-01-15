@@ -5,9 +5,14 @@ import (
 	"time"
 
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/utils"
 )
 
 func (s *SlotGeneratorService) generateWalkinSlots(schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
+	if schedule.OverbookingCount == 0 {
+		return
+	}
+
 	uniqueDaysMap := make(map[time.Time]struct{})
 
 	for _, slot := range *slots {
@@ -28,7 +33,7 @@ func (s *SlotGeneratorService) generateWalkinSlot(schedule *domain.ScheduleRule,
 	location := time.FixedZone("Europe/Moscow", 3*60*60)
 
 	startTime := time.Date(currentDayDate.Year(), currentDayDate.Month(), currentDayDate.Day(), 0, 0, 0, 0, location)
-	endTime := startTime.Add(24 * time.Hour)
+	endTime := utils.StartNextDay(startTime)
 
 	is_weekday_available := false
 	for _, availableTime := range schedule.AvailableTimes {

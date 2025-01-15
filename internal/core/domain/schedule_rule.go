@@ -92,4 +92,5 @@ type ScheduleRule struct {
 	NotAvailableTimes  []ScheduleRuleNotAvailableTime `json:"notAvailable"`
 	PlanningActive     ScheduleRulePlanningActive     `json:"planningActive"`
 	IsIgnoreGlobalRule bool                           `json:"ignore-global-rule"`
+	OverbookingCount   int                            `json:"overbooking"`
 }
