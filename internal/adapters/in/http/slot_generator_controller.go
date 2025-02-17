@@ -52,6 +52,7 @@ func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 	with50PercentRuleParam := ctx.Query("with_50_percent_rule") == "true"
 	fullDayParam := ctx.Query("full_day") == "true"
 	startDateParam := ctx.Query("start_date")
+	onlyFreeParam := ctx.Query("only_free") == "true"
 
 	var generateSlotsCount int
 	var err error
@@ -84,6 +85,7 @@ func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 		With50PercentRule: with50PercentRuleParam,
 		FullDay:           fullDayParam,
 		StartDate:         startDate,
+		OnlyFree:          onlyFreeParam,
 	}
 
 	slots, debug, err := c.useCase.GenerateSlots(ctx.Request.Context(), generateSlotsRequest)

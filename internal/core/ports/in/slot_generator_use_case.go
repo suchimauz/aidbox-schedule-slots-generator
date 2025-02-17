@@ -14,6 +14,7 @@ type GenerateSlotsRequest struct {
 	With50PercentRule bool
 	FullDay           bool
 	StartDate         time.Time
+	OnlyFree          bool
 }
 
 type SlotGeneratorUseCase interface {

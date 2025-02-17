@@ -63,6 +63,19 @@ func (s *SlotGeneratorService) prepareResponseSlots(debugInfo *SlotGeneratorServ
 	sort_routine_slots_debug.Elapse()
 	debugInfo.AddDebugInfo(sort_routine_slots_debug)
 
+	// Если нужно вернуть только свободные слоты, то отфильтровываем их
+	if request.OnlyFree {
+		onlyFreeRoutineSlots := make([]domain.Slot, 0)
+
+		for _, slot := range routineSlots {
+			if len(slot.AppointmentIDS) == 0 {
+				onlyFreeRoutineSlots = append(onlyFreeRoutineSlots, slot)
+			}
+		}
+
+		routineSlots = onlyFreeRoutineSlots
+	}
+
 	// Если количество слотов ограничено, то отрезаем их
 	// И возвращаем только нужные слоты
 	// Walkin слоты не возвращаем, т.к. они не нужны при данном варианте
