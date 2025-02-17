@@ -2,28 +2,11 @@ package json_types
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
+
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/utils"
 )
-
-func parseDate(str string) (time.Time, error) {
-	parsedDate, err := time.Parse(time.RFC3339, str)
-	// Если не удалось пробуем дату со временем, но без таймзоны
-	// По дефолту ставим UTC+3 для дат без таймзоны
-	if err != nil {
-		location := time.FixedZone("UTC+3", 3*60*60)
-		parsedDate, err = time.ParseInLocation("2006-01-02T15:04:05", str, location)
-		if err != nil {
-			// Если не удалось, пробуем как дату без времени
-			parsedDate, err = time.ParseInLocation("2006-01-02", str, location)
-			if err != nil {
-				return time.Time{}, fmt.Errorf("failed to parse time: %v", err)
-			}
-		}
-	}
-
-	return parsedDate, nil
-}
 
 type DateTime struct {
 	Date time.Time
@@ -33,7 +16,7 @@ func (t *DateTime) UnmarshalJSON(data []byte) error {
 	// Убираем кавычки вокруг строки
 	str := string(data[1 : len(data)-1])
 
-	parsedDate, err := parseDate(str)
+	parsedDate, err := utils.ParseDate(str)
 	if err != nil {
 		return err
 	}
@@ -43,7 +26,10 @@ func (t *DateTime) UnmarshalJSON(data []byte) error {
 }
 
 func (t DateTime) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.Date.Format("2006-01-02T15:04:05+03:00"))
+	// Устанавливаем временную зону
+	location := config.TimeZone
+	dateInLocation := t.Date.In(location)
+	return json.Marshal(dateInLocation.Format("2006-01-02T15:04:05-07:00"))
 }
 
 type DateTimeWithoutTimezone struct {
@@ -54,7 +40,7 @@ func (t *DateTimeWithoutTimezone) UnmarshalJSON(data []byte) error {
 	// Убираем кавычки вокруг строки
 	str := string(data[1 : len(data)-1])
 
-	parsedDate, err := parseDate(str)
+	parsedDate, err := utils.ParseDate(str)
 	if err != nil {
 		return err
 	}
@@ -64,7 +50,10 @@ func (t *DateTimeWithoutTimezone) UnmarshalJSON(data []byte) error {
 }
 
 func (t DateTimeWithoutTimezone) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.Date.Format("2006-01-02T15:04:05"))
+	// Устанавливаем временную зону
+	location := config.TimeZone
+	dateInLocation := t.Date.In(location)
+	return json.Marshal(dateInLocation.Format("2006-01-02T15:04:05"))
 }
 
 type Date struct {
@@ -75,7 +64,7 @@ func (t *Date) UnmarshalJSON(data []byte) error {
 	// Убираем кавычки вокруг строки
 	str := string(data[1 : len(data)-1])
 
-	parsedDate, err := parseDate(str)
+	parsedDate, err := utils.ParseDate(str)
 	if err != nil {
 		return err
 	}
@@ -85,7 +74,10 @@ func (t *Date) UnmarshalJSON(data []byte) error {
 }
 
 func (t Date) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.Date.Format("2006-01-02"))
+	// Устанавливаем временную зону
+	location := config.TimeZone
+	dateInLocation := t.Date.In(location)
+	return json.Marshal(dateInLocation.Format("2006-01-02"))
 }
 
 type DateTimeOrEmpty struct {
@@ -111,6 +103,8 @@ func (t DateTimeOrEmpty) MarshalJSON() ([]byte, error) {
 	if t.Date.IsZero() {
 		return json.Marshal(nil)
 	}
-
-	return t.Date.MarshalJSON()
+	// Устанавливаем временную зону
+	location := config.TimeZone
+	dateInLocation := t.Date.In(location)
+	return json.Marshal(dateInLocation.Format("2006-01-02T15:04:05-07:00"))
 }

@@ -84,13 +84,20 @@ type ScheduleRulePlanningActive struct {
 	Quantity int    `json:"quantity"`
 }
 
+type ScheduleRuleHealthcareServiceRef struct {
+	ID           string `json:"id"`
+	ResourceType string `json:"resourceType"`
+	Display      string `json:"display"`
+}
+
 type ScheduleRule struct {
-	ID                 string                         `json:"id"`
-	PlanningHorizon    ScheduleRulePlanningHorizon    `json:"planningHorizon"`
-	MinutesDuration    int                            `json:"minutesDuration"`
-	AvailableTimes     []ScheduleRuleAvailableTime    `json:"availableTime"`
-	NotAvailableTimes  []ScheduleRuleNotAvailableTime `json:"notAvailable"`
-	PlanningActive     ScheduleRulePlanningActive     `json:"planningActive"`
-	IsIgnoreGlobalRule bool                           `json:"ignore-global-rule"`
-	OverbookingCount   int                            `json:"overbooking"`
+	ID                   string                             `json:"id"`
+	PlanningHorizon      ScheduleRulePlanningHorizon        `json:"planningHorizon"`
+	MinutesDuration      int                                `json:"minutesDuration"`
+	AvailableTimes       []ScheduleRuleAvailableTime        `json:"availableTime"`
+	NotAvailableTimes    []ScheduleRuleNotAvailableTime     `json:"notAvailable"`
+	PlanningActive       ScheduleRulePlanningActive         `json:"planningActive"`
+	IsIgnoreGlobalRule   bool                               `json:"ignore-global-rule"`
+	OverbookingCount     int                                `json:"overbooking"`
+	HealthcareServiceRef []ScheduleRuleHealthcareServiceRef `json:"healthcareService"`
 }

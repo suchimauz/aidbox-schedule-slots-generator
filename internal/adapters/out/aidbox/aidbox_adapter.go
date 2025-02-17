@@ -256,3 +256,30 @@ func (a *AidboxAdapter) GetScheduleRuleAppointments(ctx context.Context, schedul
 
 	return appointments, nil
 }
+
+func (a *AidboxAdapter) GetHealthcareServiceByID(ctx context.Context, healthcareServiceID string) (*domain.HealthcareService, error) {
+	url := fmt.Sprintf("%s/HealthcareService/%s", a.baseURL, healthcareServiceID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.SetBasicAuth(a.username, a.password)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var healthcareService domain.HealthcareService
+	if err := json.NewDecoder(resp.Body).Decode(&healthcareService); err != nil {
+		return nil, err
+	}
+
+	return &healthcareService, nil
+}

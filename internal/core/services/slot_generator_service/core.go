@@ -3,11 +3,13 @@ package slot_generator_service
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/in"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/utils"
 )
@@ -31,7 +33,7 @@ func NewSlotGeneratorService(
 	}
 }
 
-func (s *SlotGeneratorService) prepareResponseSlots(debugInfo *SlotGeneratorServiceDebug, slots []domain.Slot, channelsParam string, generateSlotsCount int) map[domain.AppointmentType][]domain.Slot {
+func (s *SlotGeneratorService) prepareResponseSlots(debugInfo *SlotGeneratorServiceDebug, slots []domain.Slot, request in.GenerateSlotsRequest) map[domain.AppointmentType][]domain.Slot {
 	routineSlots := make([]domain.Slot, 0)
 	walkinSlots := make([]domain.Slot, 0)
 
@@ -42,7 +44,7 @@ func (s *SlotGeneratorService) prepareResponseSlots(debugInfo *SlotGeneratorServ
 	for _, slot := range slots {
 		if slot.SlotType == domain.AppointmentTypeRoutine {
 			// Проверяем, доступен ли слот по каналам
-			if isChannelAvailable(slot.Channel, channelsParam) {
+			if isChannelAvailable(slot.Channel, request.Channels) {
 				routineSlots = append(routineSlots, slot)
 			}
 		}
@@ -64,11 +66,11 @@ func (s *SlotGeneratorService) prepareResponseSlots(debugInfo *SlotGeneratorServ
 	// Если количество слотов ограничено, то отрезаем их
 	// И возвращаем только нужные слоты
 	// Walkin слоты не возвращаем, т.к. они не нужны при данном варианте
-	if generateSlotsCount != -1 {
-		routineSlots = routineSlots[:generateSlotsCount]
+	if request.SlotsCount != -1 {
+		routineSlots = routineSlots[:request.SlotsCount]
 
 		return map[domain.AppointmentType][]domain.Slot{
-			domain.AppointmentTypeRoutine: routineSlots[:generateSlotsCount],
+			domain.AppointmentTypeRoutine: routineSlots[:request.SlotsCount],
 		}
 	}
 
@@ -78,12 +80,12 @@ func (s *SlotGeneratorService) prepareResponseSlots(debugInfo *SlotGeneratorServ
 	}
 }
 
-func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, scheduleID string, channelsParam string, generateSlotsCount int, with50PercentRule bool) (map[domain.AppointmentType][]domain.Slot, []domain.DebugInfo, error) {
+func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, request in.GenerateSlotsRequest) (map[domain.AppointmentType][]domain.Slot, []domain.DebugInfo, error) {
 	debugInfo := SlotGeneratorServiceDebug{
 		data: make([]domain.DebugInfo, 0),
 	}
 	s.logger.Info("slots.generate.started", out.LogFields{
-		"scheduleId": scheduleID,
+		"scheduleId": request.ScheduleID,
 	})
 
 	get_schedule_rule_debug := domain.DebugInfo{
@@ -91,39 +93,172 @@ func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, scheduleID str
 	}
 	get_schedule_rule_debug.Start()
 
-	schedule, err := s.getScheduleRule(ctx, scheduleID)
+	schedule, err := s.getScheduleRule(ctx, request.ScheduleID)
 	if err != nil {
 		return nil, nil, err
 	}
 	get_schedule_rule_debug.Elapse()
 	debugInfo.AddDebugInfo(get_schedule_rule_debug)
 
-	// Проверяем кэш только если он включен
-	// if s.cachePort != nil && s.cfg.Cache.Enabled {
-	// 	if slots, exists := s.cachePort.GetSlots(ctx, scheduleID, schedule.PlanningHorizon.Start.Date, schedule.PlanningHorizon.End.Date); exists {
-	// 		s.logger.Debug("slots.generate.cache.hit", out.LogFields{
-	// 			"scheduleId": scheduleID,
-	// 			"slotsCount": len(slots),
-	// 		})
-	// 		return s.prepareResponseSlots(&debugInfo, slots), debugInfo.data, nil
-	// 	}
-	// }
-
 	s.logger.Debug("slots.generate.cache.miss", out.LogFields{
-		"scheduleId": scheduleID,
+		"scheduleId": request.ScheduleID,
 	})
 
+	var startTime, endTime, planningEndTime time.Time
+	defaultStartTime := time.Now().In(config.TimeZone)
+	// Начальная дата, равная началу планируемого горизонта или текущей датой, если горизонт не задан
+	// Или горизонт задан в прошлом
+	if schedule.PlanningHorizon.Start.Date.IsZero() || schedule.PlanningHorizon.Start.Date.Before(time.Now()) {
+		if request.StartDate.IsZero() {
+			startTime = defaultStartTime
+		} else {
+			startTime = request.StartDate
+		}
+	} else {
+		startTime = schedule.PlanningHorizon.Start.Date
+	}
+
+	generateStartTime := utils.StartCurrentDay(startTime)
+
+	// Вычисляем длительность слота
+	slotDuration := time.Duration(schedule.MinutesDuration) * time.Minute
+	if slotDuration == 0 {
+		get_healthcare_service_debug := domain.DebugInfo{
+			Event: "slots.generate.healthcare_service.fetch",
+		}
+		get_healthcare_service_debug.Start()
+
+		healthcareService, err := s.getHealthcareService(ctx, schedule.HealthcareServiceRef[0].ID)
+		if err != nil {
+			s.logger.Error("slots.generate.healthcare_service.fetch_failed", out.LogFields{
+				"error": err.Error(),
+			})
+			return nil, nil, fmt.Errorf("slots.generate.healthcare_service.fetch_failed: %w", err)
+		}
+		slotDuration = time.Duration(healthcareService.MinutesDuration) * time.Minute
+
+		get_healthcare_service_debug.Elapse()
+		debugInfo.AddDebugInfo(get_healthcare_service_debug)
+	}
+
+	if slotDuration == 0 {
+		s.logger.Error("slots.generate.slots_duration_is_0", out.LogFields{})
+		return nil, nil, fmt.Errorf("slots duration is 0")
+	}
+
+	// Вычисляем длительность активного периода, пока подразумевается что там всегда недели
+	planningActiveDuration := time.Duration(schedule.PlanningActive.Quantity) * 7 * 24 * time.Hour
+	// Вычисляем конец активного периода
+	nowPlusPlanningActiveDuration := generateStartTime.Add(planningActiveDuration)
+
+	// Проверяем есть ли вообще планируемый горизонт
+	// Или планируемый активный период заканчивается раньше, чем планируемый горизонт, то используем планируемый активный период
+	if schedule.PlanningHorizon.End.Date.IsZero() || nowPlusPlanningActiveDuration.Before(schedule.PlanningHorizon.End.Date) {
+		planningEndTime = nowPlusPlanningActiveDuration
+		// Иначе используем планируемый горизонт
+	} else {
+		planningEndTime = schedule.PlanningHorizon.End.Date
+	}
+	endTime = utils.StartNextDay(planningEndTime)
+
+	s.logger.Info("slots.generate.planning_time_range", out.LogFields{
+		"planningEndTime": planningEndTime,
+		"endTime":         endTime,
+		"startTime":       startTime,
+	})
+
+	// Используем мьютекс для безопасного доступа к слайсу slots
+	// И группу ожидания для ожидания завершения всех горутин
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
 	// Генерируем слоты с интервалами
-	slots, err := s.generateSlotsForSchedule(ctx, &debugInfo, schedule, with50PercentRule)
+	slots, err := s.generateSlotsForSchedule(ctx, &debugInfo, schedule, generateStartTime, endTime, slotDuration, request, &mu, &wg)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return s.prepareResponseSlots(&debugInfo, slots, channelsParam, generateSlotsCount), debugInfo.data, nil
+	returnSlots := make([]domain.Slot, 0)
+
+	// Добавляем только те слоты, которые начинаются после startTime
+	for _, slot := range slots {
+		startOverlapping := slot.StartTime.After(startTime)
+		endOverlapping := slot.EndTime.Before(endTime)
+		if startOverlapping && endOverlapping {
+			returnSlots = append(returnSlots, slot)
+		}
+	}
+
+	apply_50_percent_rule_debug := domain.DebugInfo{
+		Event: "slots.generate.50_percent_rule.apply",
+	}
+	apply_50_percent_rule_debug.Start()
+	// Применяем правило 50%
+	s.apply50PercentRule(startTime, endTime, request.With50PercentRule, &returnSlots, &mu, &wg)
+	// Ждем завершения всех горутин
+	wg.Wait()
+	apply_50_percent_rule_debug.Elapse()
+	debugInfo.AddDebugInfo(apply_50_percent_rule_debug)
+
+	return s.prepareResponseSlots(&debugInfo, returnSlots, request), debugInfo.data, nil
 }
 
-func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, debugInfo *SlotGeneratorServiceDebug, schedule *domain.ScheduleRule, with50PercentRule bool) ([]domain.Slot, error) {
-	var startTime, endTime, planningEndTime time.Time
+func (s *SlotGeneratorService) generateRangeSlotsForSchedule(ctx context.Context, debugInfo *SlotGeneratorServiceDebug, schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, startTime time.Time, endTime time.Time, slotDuration time.Duration, mu *sync.Mutex, wg *sync.WaitGroup) ([]domain.Slot, []domain.Slot, error) {
+	get_appointments_debug := domain.DebugInfo{
+		Event: "slots.generate.appointments.fetch",
+	}
+	get_appointments_debug.Start()
+
+	appointments, err := s.aidboxPort.GetScheduleRuleAppointments(ctx, schedule.ID, startTime, endTime)
+	if err != nil {
+		s.logger.Error("slots.generate.appointments.fetch_failed", out.LogFields{
+			"error": err.Error(),
+		})
+		return nil, nil, fmt.Errorf("slots.generate.appointments.fetch_failed: %w", err)
+	}
+
+	get_appointments_debug.Elapse()
+	debugInfo.AddDebugInfo(get_appointments_debug)
+
+	generate_routine_slots_debug := domain.DebugInfo{
+		Event: "slots.generate.routine_slots.generate",
+		Options: map[string]string{
+			"generateStartTime": startTime.Format(time.RFC3339),
+			"generateEndTime":   endTime.Format(time.RFC3339),
+		},
+	}
+	generate_walkin_slots_debug := domain.DebugInfo{
+		Event: "slots.generate.walkin_slots.generate",
+		Options: map[string]string{
+			"generateStartTime": startTime.Format(time.RFC3339),
+			"generateEndTime":   endTime.Format(time.RFC3339),
+		},
+	}
+
+	generate_routine_slots_debug.Start()
+	var routineSlots []domain.Slot
+	s.generateRoutineSlots(schedule, scheduleRuleGlobal, appointments, startTime, endTime, slotDuration, &routineSlots, mu, wg)
+	wg.Wait()
+	generate_routine_slots_debug.Elapse()
+	generate_routine_slots_debug.AddOption("routineSlotsCount", strconv.Itoa(len(routineSlots)))
+	debugInfo.AddDebugInfo(generate_routine_slots_debug)
+
+	generate_walkin_slots_debug.Start()
+	var walkinSlots []domain.Slot
+	s.generateWalkinSlots(schedule, scheduleRuleGlobal, appointments, &walkinSlots, mu, wg)
+	wg.Wait()
+	generate_walkin_slots_debug.Elapse()
+	generate_walkin_slots_debug.AddOption("walkinSlotsCount", strconv.Itoa(len(walkinSlots)))
+	debugInfo.AddDebugInfo(generate_walkin_slots_debug)
+
+	// Сохраняем в кэш слоты
+	s.cachePort.StoreSlots(ctx, schedule.ID, startTime, endTime, routineSlots)
+	s.cachePort.StoreSlots(ctx, schedule.ID, startTime, endTime, walkinSlots)
+
+	return routineSlots, walkinSlots, nil
+}
+
+func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, debugInfo *SlotGeneratorServiceDebug, schedule *domain.ScheduleRule, startTime, endTime time.Time, slotDuration time.Duration, request in.GenerateSlotsRequest, mu *sync.Mutex, wg *sync.WaitGroup) ([]domain.Slot, error) {
 	var scheduleRuleGlobal *domain.ScheduleRuleGlobal
 
 	slots := make([]domain.Slot, 0)
@@ -143,53 +278,50 @@ func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, deb
 	get_schedule_rule_global_debug.Elapse()
 	debugInfo.AddDebugInfo(get_schedule_rule_global_debug)
 
-	// Начальная дата, равная началу планируемого горизонта или текущей датой, если горизонт не задан
-	// Или горизонт задан в прошлом
-	if schedule.PlanningHorizon.Start.Date.IsZero() || schedule.PlanningHorizon.Start.Date.Before(time.Now()) {
-		startTime = time.Now()
-	} else {
-		startTime = schedule.PlanningHorizon.Start.Date
-	}
+	cachedRoutineSlots, _ := s.GetSlotsCache(ctx, schedule.ID, startTime, endTime, domain.AppointmentTypeRoutine)
+	cachedWalkinSlots, _ := s.GetSlotsCache(ctx, schedule.ID, startTime, endTime, domain.AppointmentTypeWalkin)
+	cachedGenerateStartTime, cachedGenerateEndTime, cacheExists := s.cachePort.GetSlotsCachedMeta(ctx, schedule.ID)
 
-	// Вычисляем длительность слота
-	slotDuration := time.Duration(schedule.MinutesDuration) * time.Minute
-
-	// Вычисляем длительность активного периода, пока подразумевается что там всегда недели
-	planningActiveDuration := time.Duration(schedule.PlanningActive.Quantity) * 7 * 24 * time.Hour
-	// Вычисляем конец активного периода
-	nowPlusPlanningActiveDuration := time.Now().Add(planningActiveDuration)
-
-	// Проверяем есть ли вообще планируемый горизонт
-	// Или планируемый активный период заканчивается раньше, чем планируемый горизонт, то используем планируемый активный период
-	if schedule.PlanningHorizon.End.Date.IsZero() || nowPlusPlanningActiveDuration.Before(schedule.PlanningHorizon.End.Date) {
-		planningEndTime = nowPlusPlanningActiveDuration
-		// Иначе используем планируемый горизонт
-	} else {
-		planningEndTime = schedule.PlanningHorizon.End.Date
-	}
-	endTime = utils.StartNextDay(planningEndTime)
-
-	s.logger.Info("slots.generate.planning_end_time", out.LogFields{
-		"planningEndTime": planningEndTime,
-		"endTime":         endTime,
+	s.logger.Debug("slots.generate.cache", out.LogFields{
+		"scheduleId":              schedule.ID,
+		"cachedGenerateStartTime": cachedGenerateStartTime.Format(time.RFC3339),
+		"cachedGenerateEndTime":   cachedGenerateEndTime.Format(time.RFC3339),
+		"generateStartTime":       startTime.Format(time.RFC3339),
+		"generateEndTime":         endTime.Format(time.RFC3339),
 	})
 
-	cachedRoutineSlots, cachedPlanningEndTime, exists := s.GetSlotsCache(ctx, schedule.ID, startTime, endTime, domain.AppointmentTypeRoutine)
-	cachedWalkinSlots, cachedPlanningEndTime, exists := s.GetSlotsCache(ctx, schedule.ID, startTime, endTime, domain.AppointmentTypeWalkin)
-
-	// Используем мьютекс для безопасного доступа к слайсу slots
-	// И группу ожидания для ожидания завершения всех горутин
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-
 	// Если кэш есть, то начинаем с последнего слота в кэше
-	if exists && (cachedPlanningEndTime.After(endTime) || cachedPlanningEndTime.Equal(endTime)) {
+	if cacheExists {
+		// Если начало генерации раньше, чем начало кэша, то генерируем слоты до начала кэша
+		if startTime.Before(cachedGenerateStartTime) {
+			routineSlots, walkinSlots, err := s.generateRangeSlotsForSchedule(ctx, debugInfo, schedule, scheduleRuleGlobal, startTime, cachedGenerateStartTime, slotDuration, mu, wg)
+			if err != nil {
+				return nil, err
+			}
+			cachedRoutineSlots = append(cachedRoutineSlots, routineSlots...)
+			cachedWalkinSlots = append(cachedWalkinSlots, walkinSlots...)
+		}
+
+		// Если конец даты позже, чем конец кэша, то генерируем слоты от конца кэша до конца даты
+		if endTime.After(cachedGenerateEndTime) {
+			routineSlots, walkinSlots, err := s.generateRangeSlotsForSchedule(ctx, debugInfo, schedule, scheduleRuleGlobal, cachedGenerateEndTime, endTime, slotDuration, mu, wg)
+			if err != nil {
+				return nil, err
+			}
+			cachedRoutineSlots = append(cachedRoutineSlots, routineSlots...)
+			cachedWalkinSlots = append(cachedWalkinSlots, walkinSlots...)
+		}
+
 		s.logger.Debug("slots.generate.cache.hit", out.LogFields{
 			"scheduleId": schedule.ID,
 			"slotsCount": len(cachedRoutineSlots),
 		})
 		get_from_cache_debug := domain.DebugInfo{
 			Event: "slots.generate.cache.get",
+			Options: map[string]string{
+				"cachedPlanningHorizonStart": cachedGenerateStartTime.Format(time.RFC3339),
+				"cachedPlanningHorizonEnd":   cachedGenerateEndTime.Format(time.RFC3339),
+			},
 		}
 		get_from_cache_debug.Start()
 
@@ -203,85 +335,20 @@ func (s *SlotGeneratorService) generateSlotsForSchedule(ctx context.Context, deb
 		slots = append(slots, cachedWalkinSlots...)
 
 		get_from_cache_debug.Elapse()
+		get_from_cache_debug.AddOption("routineSlotsCount", strconv.Itoa(len(cachedRoutineSlots)))
+		get_from_cache_debug.AddOption("walkinSlotsCount", strconv.Itoa(len(cachedWalkinSlots)))
 		debugInfo.AddDebugInfo(get_from_cache_debug)
-
-		apply_50_percent_rule_debug := domain.DebugInfo{
-			Event: "slots.generate.50_percent_rule.apply",
-		}
-		apply_50_percent_rule_debug.Start()
-		// Применяем правило 50%
-		s.apply50PercentRule(startTime, endTime, with50PercentRule, &slots, &mu, &wg)
-		// Ждем завершения всех горутин
-		wg.Wait()
-		apply_50_percent_rule_debug.Elapse()
-		debugInfo.AddDebugInfo(apply_50_percent_rule_debug)
 
 		return slots, nil
 	}
 
-	get_appointments_debug := domain.DebugInfo{
-		Event: "slots.generate.appointments.fetch",
-	}
-	get_appointments_debug.Start()
-
-	appointments, err := s.aidboxPort.GetScheduleRuleAppointments(ctx, schedule.ID, startTime, endTime)
+	routineSlots, walkinSlots, err := s.generateRangeSlotsForSchedule(ctx, debugInfo, schedule, scheduleRuleGlobal, startTime, endTime, slotDuration, mu, wg)
 	if err != nil {
-		s.logger.Error("slots.generate.appointments.fetch_failed", out.LogFields{
-			"error": err.Error(),
-		})
-		return nil, fmt.Errorf("slots.generate.appointments.fetch_failed: %w", err)
+		return nil, err
 	}
 
-	get_appointments_debug.Elapse()
-	debugInfo.AddDebugInfo(get_appointments_debug)
-
-	generate_routine_slots_debug := domain.DebugInfo{
-		Event: "slots.generate.routine_slots.generate",
-	}
-	generate_walkin_slots_debug := domain.DebugInfo{
-		Event: "slots.generate.walkin_slots.generate",
-	}
-
-	generate_routine_slots_debug.Start()
-	// Генерируем слоты с учетом availableTime
-	s.generateRoutineSlots(schedule, scheduleRuleGlobal, appointments, startTime, endTime, slotDuration, &slots, &mu, &wg)
-	// Ждем завершения всех горутин
-	wg.Wait()
-
-	routineSlotsLen := len(slots)
-	s.logger.Info("slots.generate.routine_slots.generated", out.LogFields{
-		"length": routineSlotsLen,
-	})
-	generate_routine_slots_debug.Elapse()
-
-	generate_walkin_slots_debug.Start()
-	// Генерируем слоты без времени
-	s.generateWalkinSlots(schedule, scheduleRuleGlobal, appointments, &slots, &mu, &wg)
-
-	// Ждем завершения всех горутин
-	wg.Wait()
-	generate_walkin_slots_debug.Elapse()
-
-	s.logger.Info("slots.generate.walkin_slots.generated", out.LogFields{
-		"length": len(slots) - routineSlotsLen,
-	})
-
-	// Сохраняем в кэш слоты
-	s.cachePort.StoreSlots(ctx, schedule.ID, endTime, slots)
-
-	debugInfo.AddDebugInfo(generate_routine_slots_debug)
-	debugInfo.AddDebugInfo(generate_walkin_slots_debug)
-
-	apply_50_percent_rule_debug := domain.DebugInfo{
-		Event: "slots.generate.50_percent_rule.apply",
-	}
-	apply_50_percent_rule_debug.Start()
-	// Применяем правило 50%
-	s.apply50PercentRule(startTime, endTime, with50PercentRule, &slots, &mu, &wg)
-	// Ждем завершения всех горутин
-	wg.Wait()
-	apply_50_percent_rule_debug.Elapse()
-	debugInfo.AddDebugInfo(apply_50_percent_rule_debug)
+	slots = append(slots, routineSlots...)
+	slots = append(slots, walkinSlots...)
 
 	return slots, nil
 }
@@ -339,4 +406,35 @@ func (s *SlotGeneratorService) getScheduleRule(ctx context.Context, scheduleId s
 	}
 
 	return scheduleRule, nil
+}
+
+func (s *SlotGeneratorService) getHealthcareService(ctx context.Context, healthcareServiceID string) (*domain.HealthcareService, error) {
+	healthcareService, exists := s.GetHealthcareServiceCache(ctx, healthcareServiceID)
+	if exists {
+		s.logger.Debug("healthcare_service.cache.hit", out.LogFields{
+			"healthcareServiceId": healthcareServiceID,
+		})
+		return healthcareService, nil
+	}
+
+	s.logger.Debug("healthcare_service.cache.miss", out.LogFields{
+		"healthcareServiceId": healthcareServiceID,
+	})
+
+	healthcareService, err := s.aidboxPort.GetHealthcareServiceByID(ctx, healthcareServiceID)
+	if err != nil {
+		s.logger.Error("healthcare_service.fetch_failed", out.LogFields{
+			"error": err.Error(),
+		})
+		return nil, err
+	}
+
+	healthcareService, err = s.StoreHealthcareServiceCache(ctx, *healthcareService)
+	if err != nil {
+		s.logger.Error("healthcare_service.cache.store_failed", out.LogFields{
+			"error": err.Error(),
+		})
+	}
+
+	return healthcareService, nil
 }

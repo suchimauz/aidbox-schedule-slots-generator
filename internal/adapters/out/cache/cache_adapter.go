@@ -13,6 +13,7 @@ type CacheAdapter struct {
 	slotsCache              *slotsCache
 	scheduleRuleGlobalCache *scheduleRuleGlobalCache
 	scheduleRuleCache       *scheduleRuleCache
+	healthcareServiceCache  *healthcareServiceCache
 	logger                  out.LoggerPort
 }
 
@@ -55,10 +56,24 @@ func NewCacheAdapter(cfg *config.Config, logger out.LoggerPort) (*CacheAdapter, 
 		cache: lruScheduleRuleCache,
 	}
 
+	lruHealthcareServiceCache, err := lru.New[string, *domain.HealthcareService](cfg.Cache.HealthcareServiceSize)
+	if err != nil {
+		logger.Error("cache.healthcare_service.init.failed", out.LogFields{
+			"error": err.Error(),
+			"size":  cfg.Cache.HealthcareServiceSize,
+		})
+		return nil, err
+	}
+
+	healthcareServiceCache := &healthcareServiceCache{
+		cache: lruHealthcareServiceCache,
+	}
+
 	return &CacheAdapter{
 		slotsCache:              slotsCache,
 		scheduleRuleGlobalCache: scheduleRuleGlobalCache,
 		scheduleRuleCache:       scheduleRuleCache,
+		healthcareServiceCache:  healthcareServiceCache,
 		logger:                  logger.WithModule("CacheAdapter"),
 	}, nil
 }

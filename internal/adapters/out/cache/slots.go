@@ -11,8 +11,9 @@ import (
 )
 
 type slotsCacheEntry struct {
-	Slots   map[domain.AppointmentType]map[time.Time]domain.Slot
-	EndDate time.Time
+	Slots     map[domain.AppointmentType]map[time.Time]domain.Slot
+	StartDate time.Time
+	EndDate   time.Time
 }
 
 type slotsCache struct {
@@ -22,7 +23,19 @@ type slotsCache struct {
 
 // Кэширование слотов
 
-func (c *CacheAdapter) GetSlots(ctx context.Context, scheduleID string, startDate time.Time, endDate time.Time, slotType domain.AppointmentType) ([]domain.Slot, time.Time, bool) {
+func (c *CacheAdapter) GetSlotsCachedMeta(ctx context.Context, scheduleID string) (time.Time, time.Time, bool) {
+	c.slotsCache.mu.RLock()
+	defer c.slotsCache.mu.RUnlock()
+
+	entry, cacheExists := c.slotsCache.cache.Get(scheduleID)
+	if cacheExists {
+		return entry.StartDate, entry.EndDate, true
+	}
+
+	return time.Time{}, time.Time{}, false
+}
+
+func (c *CacheAdapter) GetSlots(ctx context.Context, scheduleID string, startDate time.Time, endDate time.Time, slotType domain.AppointmentType) ([]domain.Slot, bool) {
 	c.slotsCache.mu.RLock()
 	defer c.slotsCache.mu.RUnlock()
 
@@ -32,50 +45,26 @@ func (c *CacheAdapter) GetSlots(ctx context.Context, scheduleID string, startDat
 		if slotsMapExists {
 			var slots []domain.Slot
 
-			// Для слотов со временем должно быть пересечение с диапазоном
-			if slotType == domain.AppointmentTypeRoutine {
-				for _, slot := range slotsMap {
-					// Слоты в прошлом не нужны
-					if slot.StartTime.Before(time.Now()) {
-						continue
-					}
-
-					startOverlapping := endDate.After(slot.StartTime)
-					endOverlapping := startDate.Before(slot.EndTime)
-					slot.InCache = true
-					if startOverlapping && endOverlapping {
-						slots = append(slots, slot)
-					}
+			// Для слотов должно быть пересечение с диапазоном
+			for _, slot := range slotsMap {
+				startOverlapping := endDate.After(slot.StartTime)
+				endOverlapping := startDate.Before(slot.EndTime)
+				slot.InCache = true
+				if startOverlapping && endOverlapping {
+					slots = append(slots, slot)
+				} else {
+					c.logger.Info("slots.get.slot", out.LogFields{
+						"slot":      slot,
+						"startDate": startDate,
+						"endDate":   endDate,
+					})
 				}
 			}
-
-			if slotType == domain.AppointmentTypeWalkin {
-				for _, slot := range slotsMap {
-					// Слоты в прошлом не нужны
-
-					slotStartWithoutTime := time.Date(slot.StartTime.Year(), slot.StartTime.Month(), slot.StartTime.Day(), 0, 0, 0, 0, slot.StartTime.Location())
-					startDateWithoutTime := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, startDate.Location())
-
-					if slotStartWithoutTime.Before(startDateWithoutTime) {
-						c.logger.Info("slots.get.walkin.slot", out.LogFields{
-							"slot":      slot,
-							"startDate": startDate.Truncate(24 * time.Hour),
-							"endDate":   endDate,
-						})
-						continue
-					}
-
-					if slot.StartTime.Before(endDate) {
-						slot.InCache = true
-						slots = append(slots, slot)
-					}
-				}
-			}
-			return slots, entry.EndDate, true
+			return slots, true
 		}
 	}
 
-	return []domain.Slot{}, time.Time{}, false
+	return []domain.Slot{}, false
 }
 
 func (c *CacheAdapter) GetSlotByAppointment(ctx context.Context, scheduleID string, appointment domain.Appointment) (domain.Slot, bool) {
@@ -100,30 +89,44 @@ func (c *CacheAdapter) GetSlotByAppointment(ctx context.Context, scheduleID stri
 	return domain.Slot{}, false
 }
 
-func (c *CacheAdapter) StoreSlots(ctx context.Context, scheduleID string, planningEndTime time.Time, slots []domain.Slot) {
+func (c *CacheAdapter) StoreSlots(ctx context.Context, scheduleID string, startDate time.Time, endDate time.Time, slots []domain.Slot) {
 	c.slotsCache.mu.Lock()
 	defer c.slotsCache.mu.Unlock()
+
+	if len(slots) == 0 {
+		return
+	}
 
 	c.logger.Debug("cache.slots.store", out.LogFields{
 		"scheduleId": scheduleID,
 		"slotsCount": len(slots),
 	})
 
-	slotsMap := make(map[domain.AppointmentType]map[time.Time]domain.Slot)
-	for _, slot := range slots {
-		if slotsMap[slot.SlotType] == nil {
-			slotsMap[slot.SlotType] = make(map[time.Time]domain.Slot)
+	entry, exists := c.slotsCache.cache.Get(scheduleID)
+	if !exists {
+		entry = &slotsCacheEntry{
+			Slots: make(map[domain.AppointmentType]map[time.Time]domain.Slot),
 		}
-		slotsMap[slot.SlotType][slot.StartTime] = slot
 	}
 
-	// Создаем новую запись в кэше
-	newEntry := &slotsCacheEntry{
-		Slots:   slotsMap,
-		EndDate: planningEndTime,
+	for _, slot := range slots {
+		if entry.Slots[slot.SlotType] == nil {
+			entry.Slots[slot.SlotType] = make(map[time.Time]domain.Slot)
+		}
+		if _, exists := entry.Slots[slot.SlotType][slot.StartTime]; !exists {
+			entry.Slots[slot.SlotType][slot.StartTime] = slot
+		}
 	}
 
-	c.slotsCache.cache.Add(scheduleID, newEntry)
+	// Обновляем startDate и endDate
+	if entry.StartDate.IsZero() || startDate.Before(entry.StartDate) {
+		entry.StartDate = startDate
+	}
+	if entry.EndDate.IsZero() || endDate.After(entry.EndDate) {
+		entry.EndDate = endDate
+	}
+
+	c.slotsCache.cache.Add(scheduleID, entry)
 }
 
 // Обновление слотов если они уже есть в кэше

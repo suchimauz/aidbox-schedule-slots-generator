@@ -19,6 +19,9 @@ type AidboxPort interface {
 
 	// Методы для работы с производственным календарем
 	GetScheduleRuleGlobal(ctx context.Context) (*domain.ScheduleRuleGlobal, error)
+
+	// Методы для работы с услугами
+	GetHealthcareServiceByID(ctx context.Context, healthcareServiceID string) (*domain.HealthcareService, error)
 }
 
 type AidboxBundleEntryItem struct {

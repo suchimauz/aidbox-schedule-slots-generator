@@ -4,12 +4,14 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/config"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/domain"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/in"
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
+	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/utils"
 )
 
 type SlotGeneratorController struct {
@@ -47,7 +49,9 @@ type GenerateBatchSlotsRequest struct {
 func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 	scheduleID := ctx.Param("scheduleId")
 	channelsParam := ctx.Query("channel")
-	with50PercentRule := ctx.Query("with_50_percent_rule") == "true"
+	with50PercentRuleParam := ctx.Query("with_50_percent_rule") == "true"
+	fullDayParam := ctx.Query("full_day") == "true"
+	startDateParam := ctx.Query("start_date")
 
 	var generateSlotsCount int
 	var err error
@@ -64,7 +68,25 @@ func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 		}
 	}
 
-	slots, debug, err := c.useCase.GenerateSlots(ctx.Request.Context(), scheduleID, channelsParam, generateSlotsCount, with50PercentRule)
+	var startDate time.Time
+	if startDateParam != "" {
+		startDate, err = utils.ParseDate(startDateParam)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid start_date query parameter, must be RFC3339 format"})
+			return
+		}
+	}
+
+	generateSlotsRequest := in.GenerateSlotsRequest{
+		ScheduleID:        scheduleID,
+		Channels:          channelsParam,
+		SlotsCount:        generateSlotsCount,
+		With50PercentRule: with50PercentRuleParam,
+		FullDay:           fullDayParam,
+		StartDate:         startDate,
+	}
+
+	slots, debug, err := c.useCase.GenerateSlots(ctx.Request.Context(), generateSlotsRequest)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

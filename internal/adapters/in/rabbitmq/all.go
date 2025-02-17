@@ -76,11 +76,13 @@ func (l *CacheHitListener) processAllMessage(ctx context.Context, msg amqp.Deliv
 		go l.useCase.InvalidateAllSlotsCache(ctx)
 		go l.useCase.InvalidateScheduleRuleGlobalCache(ctx)
 		go l.useCase.InvalidateAllScheduleRuleCache(ctx)
+		go l.useCase.InvalidateAllHealthcareServiceCache(ctx)
 
 		l.logger.Info("_all_.message.invalidated", out.LogFields{
 			"slots_cache":                true,
 			"schedule_rule_global_cache": true,
 			"schedule_rule_cache":        true,
+			"healthcare_service_cache":   true,
 		})
 	}
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
@@ -21,6 +22,8 @@ const (
 	EnvStage      Environment = "stage"
 	EnvProduction Environment = "production"
 )
+
+var TimeZone *time.Location
 
 type ConfigBasicClient struct {
 	Username string
@@ -54,9 +57,10 @@ type (
 		RabbitMq RabbitMqConfig
 
 		Cache struct {
-			Enabled          bool `envconfig:"CACHE_ENABLED"`
-			SlotsSize        int  `envconfig:"CACHE_SLOTS_SIZE" default:"1000"`
-			ScheduleRuleSize int  `envconfig:"CACHE_SCHEDULERULE_SIZE" default:"1000"`
+			Enabled               bool `envconfig:"CACHE_ENABLED"`
+			SlotsSize             int  `envconfig:"CACHE_SLOTS_SIZE" default:"1000"`
+			ScheduleRuleSize      int  `envconfig:"CACHE_SCHEDULERULE_SIZE" default:"1000"`
+			HealthcareServiceSize int  `envconfig:"CACHE_HEALTHCARE_SERVICE_SIZE" default:"1000"`
 		}
 	}
 
@@ -86,6 +90,10 @@ type (
 		AppointmentQueueExchange string `envconfig:"RABBITMQ_QUEUE_APPOINTMENT_EXCHANGE" default:"aidbox.slot-generator-svc.topic"`
 		AppointmentQueueName     string `envconfig:"RABBITMQ_QUEUE_APPOINTMENT_NAME" default:"slot-generator-svc.cache.appointment"`
 		AppointmentQueueBind     string `envconfig:"RABBITMQ_QUEUE_APPOINTMENT_BIND" default:"*.slot-generator-svc.appointment.#"`
+
+		HealthcareServiceQueueExchange string `envconfig:"RABBITMQ_QUEUE_HEALTHCARE_SERVICE_EXCHANGE" default:"aidbox.slot-generator-svc.topic"`
+		HealthcareServiceQueueName     string `envconfig:"RABBITMQ_QUEUE_HEALTHCARE_SERVICE_NAME" default:"slot-generator-svc.cache.healthcareservice"`
+		HealthcareServiceQueueBind     string `envconfig:"RABBITMQ_QUEUE_HEALTHCARE_SERVICE_BIND" default:"*.slot-generator-svc.healthcareservice.#"`
 	}
 )
 
@@ -100,6 +108,12 @@ func NewConfig() (*Config, error) {
 
 	// Приведение окружения к нижнему регистру для унификации
 	cfg.App.Env = Environment(strings.ToLower(string(cfg.App.Env)))
+
+	var err error
+	TimeZone, err = time.LoadLocation(cfg.App.Timezone)
+	if err != nil {
+		return nil, err
+	}
 
 	// Разделение клиентов Aidbox
 	if cfg.Auth.BasicClients == nil {

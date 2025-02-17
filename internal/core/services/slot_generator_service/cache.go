@@ -9,12 +9,14 @@ import (
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/core/ports/out"
 )
 
-func (s *SlotGeneratorService) GetSlotsCache(ctx context.Context, scheduleID string, startDate time.Time, endDate time.Time, slotType domain.AppointmentType) ([]domain.Slot, time.Time, bool) {
+// Кэширование слотов
+
+func (s *SlotGeneratorService) GetSlotsCache(ctx context.Context, scheduleID string, startTime time.Time, endTime time.Time, slotType domain.AppointmentType) ([]domain.Slot, bool) {
 	if s.cachePort == nil {
-		return []domain.Slot{}, time.Time{}, false
+		return []domain.Slot{}, false
 	}
 
-	return s.cachePort.GetSlots(ctx, scheduleID, startDate, endDate, slotType)
+	return s.cachePort.GetSlots(ctx, scheduleID, startTime, endTime, slotType)
 }
 
 func (s *SlotGeneratorService) StoreAppointmentCacheSlot(ctx context.Context, scheduleID string, appointment domain.Appointment) error {
@@ -142,5 +144,38 @@ func (s *SlotGeneratorService) StoreScheduleRuleGlobalCache(ctx context.Context,
 }
 
 func (s *SlotGeneratorService) InvalidateScheduleRuleGlobalCache(ctx context.Context) error {
+	return nil
+}
+
+func (s *SlotGeneratorService) GetHealthcareServiceCache(ctx context.Context, healthcareServiceID string) (*domain.HealthcareService, bool) {
+	if s.cachePort == nil {
+		return nil, false
+	}
+
+	healthcareService, exists := s.cachePort.GetHealthcareService(ctx, healthcareServiceID)
+	return healthcareService, exists
+}
+
+func (s *SlotGeneratorService) StoreHealthcareServiceCache(ctx context.Context, healthcareService domain.HealthcareService) (*domain.HealthcareService, error) {
+	if s.cachePort != nil {
+		s.cachePort.StoreHealthcareService(ctx, healthcareService)
+	}
+
+	return &healthcareService, nil
+}
+
+func (s *SlotGeneratorService) InvalidateHealthcareServiceCache(ctx context.Context, healthcareServiceID string) error {
+	if s.cachePort != nil {
+		s.cachePort.InvalidateHealthcareServiceCache(ctx, healthcareServiceID)
+	}
+
+	return nil
+}
+
+func (s *SlotGeneratorService) InvalidateAllHealthcareServiceCache(ctx context.Context) error {
+	if s.cachePort != nil {
+		s.cachePort.InvalidateAllHealthcareServiceCache(ctx)
+	}
+
 	return nil
 }

@@ -32,9 +32,10 @@ type CacheMessageRoutingKey struct {
 }
 
 const (
-	CacheHitResourceTypeAll          CacheHitResourceType = "_all_"
-	CacheHitResourceTypeScheduleRule CacheHitResourceType = "schedulerule"
-	CacheHitResourceTypeAppointment  CacheHitResourceType = "appointment"
+	CacheHitResourceTypeAll               CacheHitResourceType = "_all_"
+	CacheHitResourceTypeScheduleRule      CacheHitResourceType = "schedulerule"
+	CacheHitResourceTypeAppointment       CacheHitResourceType = "appointment"
+	CacheHitResourceTypeHealthcareService CacheHitResourceType = "healthcareservice"
 )
 
 const (
@@ -99,6 +100,13 @@ func (l *CacheHitListener) Start(ctx context.Context) error {
 	}
 	l.logger.Info("_all_.queue.started", out.LogFields{
 		"queue": l.cfg.RabbitMq.QueueConfig.AllQueueName,
+	})
+	err = l.startHealthcareServiceQueue(ctx)
+	if err != nil {
+		return err
+	}
+	l.logger.Info("healthcare_service.queue.started", out.LogFields{
+		"queue": l.cfg.RabbitMq.QueueConfig.HealthcareServiceQueueName,
 	})
 
 	return nil
