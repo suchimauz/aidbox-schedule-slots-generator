@@ -81,8 +81,6 @@ func isAvailableSlotFor50PercentRule(slot domain.Slot) bool {
 
 // Обрабатывает слоты в рамках одной недели
 func weekProcessing50PercentRule(currentWeekDate time.Time, nextWeekDate time.Time, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
-	defer wg.Done()
-
 	weekSlots := make([]domain.Slot, 0)
 
 	// Получаем все слоты, которые попадают в текущую неделю
@@ -163,11 +161,23 @@ func (s *SlotGeneratorService) apply50PercentRule(startDate time.Time, endDate t
 	// И вызываем функцию StartNextWeek, которая увеличивает день на 7 и устанавливает время на 00:00
 	ruleStartDate := utils.StartNextWeek(startDate.AddDate(0, 0, 7))
 
-	// Проходимся понедельно начиная с 3-ей недели до окончания периода планирования
-	// Если половина слотов занята, то блокируем все слоты в этой неделе
+	// Создаем пул воркеров
+	workerPool := make(chan struct{}, 20) // Ограничиваем 10 горутинами
+
 	for currentWeekDate := ruleStartDate; currentWeekDate.Before(endDate); currentWeekDate = currentWeekDate.AddDate(0, 0, 7) {
 		nextWeekDate := currentWeekDate.AddDate(0, 0, 7)
 		wg.Add(1)
-		go weekProcessing50PercentRule(currentWeekDate, nextWeekDate, slots, mu, wg)
+
+		// Занимаем слот в пуле
+		workerPool <- struct{}{}
+
+		go func(current, next time.Time) {
+			defer func() {
+				// Освобождаем слот в пуле
+				<-workerPool
+				wg.Done()
+			}()
+			weekProcessing50PercentRule(current, next, slots, mu, wg)
+		}(currentWeekDate, nextWeekDate)
 	}
 }

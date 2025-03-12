@@ -103,8 +103,13 @@ func (t DateTimeOrEmpty) MarshalJSON() ([]byte, error) {
 	if t.Date.IsZero() {
 		return json.Marshal(nil)
 	}
+
 	// Устанавливаем временную зону
 	location := config.TimeZone
+	if location == nil {
+		location = time.UTC
+	}
+
 	dateInLocation := t.Date.In(location)
 	return json.Marshal(dateInLocation.Format("2006-01-02T15:04:05-07:00"))
 }

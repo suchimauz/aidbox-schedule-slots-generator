@@ -10,6 +10,7 @@ import (
 )
 
 type CacheAdapter struct {
+	cfg                     *config.Config
 	slotsCache              *slotsCache
 	scheduleRuleGlobalCache *scheduleRuleGlobalCache
 	scheduleRuleCache       *scheduleRuleCache
@@ -70,6 +71,7 @@ func NewCacheAdapter(cfg *config.Config, logger out.LoggerPort) (*CacheAdapter, 
 	}
 
 	return &CacheAdapter{
+		cfg:                     cfg,
 		slotsCache:              slotsCache,
 		scheduleRuleGlobalCache: scheduleRuleGlobalCache,
 		scheduleRuleCache:       scheduleRuleCache,

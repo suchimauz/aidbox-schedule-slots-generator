@@ -112,12 +112,16 @@ func (c *SlotGeneratorController) generateSlots(ctx *gin.Context) {
 	})
 }
 
+func unauthorizedResponse(ctx *gin.Context) {
+	ctx.Header("WWW-Authenticate", "Basic realm=Authorization Required")
+	ctx.AbortWithStatus(http.StatusUnauthorized)
+}
+
 func (c *SlotGeneratorController) basicAuth() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		username, password, hasAuth := ctx.Request.BasicAuth()
 		if !hasAuth {
-			ctx.Header("WWW-Authenticate", "Basic realm=Authorization Required")
-			ctx.AbortWithStatus(http.StatusUnauthorized)
+			unauthorizedResponse(ctx)
 			return
 		}
 
@@ -132,8 +136,7 @@ func (c *SlotGeneratorController) basicAuth() gin.HandlerFunc {
 		}
 
 		if !authenticated {
-			ctx.Header("WWW-Authenticate", "Basic realm=Authorization Required")
-			ctx.AbortWithStatus(http.StatusUnauthorized)
+			unauthorizedResponse(ctx)
 			return
 		}
 

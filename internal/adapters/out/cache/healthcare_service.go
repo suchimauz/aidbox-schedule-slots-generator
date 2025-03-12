@@ -20,6 +20,13 @@ func (c *CacheAdapter) GetHealthcareService(ctx context.Context, healthcareServi
 	c.healthcareServiceCache.mu.RLock()
 	defer c.healthcareServiceCache.mu.RUnlock()
 
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.healthcare_service.get_healthcare_service.disabled", out.LogFields{
+			"healthcareServiceId": healthcareServiceID,
+		})
+		return nil, false
+	}
+
 	entry, exists := c.healthcareServiceCache.cache.Get(healthcareServiceID)
 	if !exists {
 		c.logger.Debug("cache.get.miss", out.LogFields{
@@ -34,6 +41,13 @@ func (c *CacheAdapter) GetHealthcareService(ctx context.Context, healthcareServi
 func (c *CacheAdapter) StoreHealthcareService(ctx context.Context, healthcareService domain.HealthcareService) {
 	c.healthcareServiceCache.mu.Lock()
 	defer c.healthcareServiceCache.mu.Unlock()
+
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.healthcare_service.store_healthcare_service.disabled", out.LogFields{
+			"healthcareServiceId": healthcareService.ID,
+		})
+		return
+	}
 
 	c.healthcareServiceCache.cache.Add(healthcareService.ID, &healthcareService)
 }

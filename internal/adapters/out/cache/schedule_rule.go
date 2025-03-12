@@ -20,6 +20,13 @@ func (c *CacheAdapter) GetScheduleRule(ctx context.Context, scheduleID string) (
 	c.scheduleRuleCache.mu.RLock()
 	defer c.scheduleRuleCache.mu.RUnlock()
 
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.schedule_rule.get_schedule_rule.disabled", out.LogFields{
+			"scheduleId": scheduleID,
+		})
+		return nil, false
+	}
+
 	entry, exists := c.scheduleRuleCache.cache.Get(scheduleID)
 	if !exists {
 		c.logger.Debug("cache.get.miss", out.LogFields{
@@ -34,6 +41,13 @@ func (c *CacheAdapter) GetScheduleRule(ctx context.Context, scheduleID string) (
 func (c *CacheAdapter) StoreScheduleRule(ctx context.Context, scheduleRule domain.ScheduleRule) {
 	c.scheduleRuleCache.mu.Lock()
 	defer c.scheduleRuleCache.mu.Unlock()
+
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.schedule_rule.store_schedule_rule.disabled", out.LogFields{
+			"scheduleId": scheduleRule.ID,
+		})
+		return
+	}
 
 	c.scheduleRuleCache.cache.Add(scheduleRule.ID, &scheduleRule)
 }

@@ -82,36 +82,22 @@ func main() {
 
 	// Настройка RabbitMQ слушателя только если он включен
 	if cfg.RabbitMq.Enabled {
-		listener, err := rabbitmq.NewCacheHitListener(
-			slotGeneratorService,
-			cfg,
-			logger.WithModule("RabbitMQListener"),
-		)
+		// Инициализация RabbitMQ слушателя
+		rabbitListener, err := rabbitmq.NewCacheHitListener(cfg, slotGeneratorService, logger)
 		if err != nil {
-			logger.Error("app.rabbitmq.init_failed", out.LogFields{
+			logger.Error("rabbitmq.init_failed", out.LogFields{
 				"error": err.Error(),
 			})
-			os.Exit(1)
+		} else {
+			// Запуск слушателя в отдельной горутине
+			go func() {
+				if err := rabbitListener.Start(context.Background()); err != nil {
+					logger.Error("rabbitmq.start_failed", out.LogFields{
+						"error": err.Error(),
+					})
+				}
+			}()
 		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		if err := listener.Start(ctx); err != nil {
-			logger.Error("app.rabbitmq.start_failed", out.LogFields{
-				"error": err.Error(),
-			})
-			os.Exit(1)
-		}
-
-		// Добавляем остановку RabbitMQ в defer
-		defer func() {
-			if err := listener.Stop(); err != nil {
-				logger.Error("app.rabbitmq.stop_failed", out.LogFields{
-					"error": err.Error(),
-				})
-			}
-		}()
 	}
 
 	sigChan := make(chan os.Signal, 1)

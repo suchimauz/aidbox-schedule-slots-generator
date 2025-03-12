@@ -22,6 +22,11 @@ func (c *CacheAdapter) GetScheduleRuleGlobal(ctx context.Context) (*domain.Sched
 	c.scheduleRuleGlobalCache.mu.RLock()
 	defer c.scheduleRuleGlobalCache.mu.RUnlock()
 
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.schedule_rule_global.get_schedule_rule_global.disabled", nil)
+		return nil, false
+	}
+
 	if c.scheduleRuleGlobalCache.cache == nil || time.Since(c.scheduleRuleGlobalCache.timestamp) > c.scheduleRuleGlobalCache.ttl {
 		return nil, false
 	}
@@ -32,6 +37,11 @@ func (c *CacheAdapter) GetScheduleRuleGlobal(ctx context.Context) (*domain.Sched
 func (c *CacheAdapter) StoreScheduleRuleGlobal(ctx context.Context, scheduleRuleGlobal domain.ScheduleRuleGlobal) {
 	c.scheduleRuleGlobalCache.mu.Lock()
 	defer c.scheduleRuleGlobalCache.mu.Unlock()
+
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.schedule_rule_global.store_schedule_rule_global.disabled", nil)
+		return
+	}
 
 	c.scheduleRuleGlobalCache.cache = &scheduleRuleGlobal
 	c.scheduleRuleGlobalCache.timestamp = time.Now()

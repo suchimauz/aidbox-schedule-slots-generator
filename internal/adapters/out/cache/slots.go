@@ -27,6 +27,13 @@ func (c *CacheAdapter) GetSlotsCachedMeta(ctx context.Context, scheduleID string
 	c.slotsCache.mu.RLock()
 	defer c.slotsCache.mu.RUnlock()
 
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.slots.get_slots_cached_meta.disabled", out.LogFields{
+			"scheduleId": scheduleID,
+		})
+		return time.Time{}, time.Time{}, false
+	}
+
 	entry, cacheExists := c.slotsCache.cache.Get(scheduleID)
 	if cacheExists {
 		return entry.StartDate, entry.EndDate, true
@@ -38,6 +45,13 @@ func (c *CacheAdapter) GetSlotsCachedMeta(ctx context.Context, scheduleID string
 func (c *CacheAdapter) GetSlots(ctx context.Context, scheduleID string, startDate time.Time, endDate time.Time, slotType domain.AppointmentType) ([]domain.Slot, bool) {
 	c.slotsCache.mu.RLock()
 	defer c.slotsCache.mu.RUnlock()
+
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.slots.get_slots.disabled", out.LogFields{
+			"scheduleId": scheduleID,
+		})
+		return []domain.Slot{}, false
+	}
 
 	entry, cacheExists := c.slotsCache.cache.Get(scheduleID)
 	if cacheExists {
@@ -71,6 +85,13 @@ func (c *CacheAdapter) GetSlotByAppointment(ctx context.Context, scheduleID stri
 	c.slotsCache.mu.RLock()
 	defer c.slotsCache.mu.RUnlock()
 
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.slots.get_slot_by_appointment.disabled", out.LogFields{
+			"scheduleId": scheduleID,
+		})
+		return domain.Slot{}, false
+	}
+
 	entry, cacheExists := c.slotsCache.cache.Get(scheduleID)
 	if cacheExists {
 		slotsMap, slotsMapExists := entry.Slots[appointment.Type]
@@ -94,6 +115,10 @@ func (c *CacheAdapter) StoreSlots(ctx context.Context, scheduleID string, startD
 	defer c.slotsCache.mu.Unlock()
 
 	if len(slots) == 0 {
+		return
+	}
+
+	if !c.cfg.Cache.Enabled {
 		return
 	}
 
@@ -134,6 +159,10 @@ func (c *CacheAdapter) UpdateSlot(ctx context.Context, scheduleID string, slot d
 	c.slotsCache.mu.Lock()
 	defer c.slotsCache.mu.Unlock()
 
+	if !c.cfg.Cache.Enabled {
+		return
+	}
+
 	entry, exists := c.slotsCache.cache.Get(scheduleID)
 	if !exists {
 		return
@@ -146,10 +175,19 @@ func (c *CacheAdapter) UpdateSlot(ctx context.Context, scheduleID string, slot d
 }
 
 func (c *CacheAdapter) InvalidateSlotsCache(ctx context.Context, scheduleID string) {
-	c.slotsCache.mu.Lock()
-	defer c.slotsCache.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		c.logger.Debug("cache.invalidate_slots.context_canceled", out.LogFields{
+			"scheduleId": scheduleID,
+			"error":      ctx.Err().Error(),
+		})
+		return
+	default:
+		c.slotsCache.mu.Lock()
+		defer c.slotsCache.mu.Unlock()
 
-	c.slotsCache.cache.Remove(scheduleID)
+		c.slotsCache.cache.Remove(scheduleID)
+	}
 }
 
 func (c *CacheAdapter) InvalidateAllSlotsCache(ctx context.Context) {
