@@ -47,7 +47,7 @@ compose-build-force:
 compose-run: compose-build
 	docker-compose up --remove-orphans aidbox_schedule_slots_generator_runner
 
-compose-run-force: compose-build-force
+compose-run-force:
 	docker-compose up --build --remove-orphans aidbox_schedule_slots_generator_runner
 
 
