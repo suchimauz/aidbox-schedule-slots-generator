@@ -10,22 +10,6 @@ import (
 )
 
 // Функция для проверки доступности канала
-func isаChannelAvailable(availableTime domain.ScheduleRuleAvailableTime, channels string) bool {
-	if channels == "" {
-		return true
-	}
-
-	splitted_channels := strings.Split(channels, ",")
-	for _, channel := range splitted_channels {
-		if availableTime.ContainsChannel(channel) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// Функция для проверки доступности канала
 func isChannelAvailable(channels []domain.ScheduleRuleChannel, check_channels string) bool {
 	if check_channels == "" {
 		return true

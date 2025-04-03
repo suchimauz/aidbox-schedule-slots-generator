@@ -17,15 +17,15 @@ type healthcareServiceCache struct {
 // Кэширование услуг
 
 func (c *CacheAdapter) GetHealthcareService(ctx context.Context, healthcareServiceID string) (*domain.HealthcareService, bool) {
-	c.healthcareServiceCache.mu.RLock()
-	defer c.healthcareServiceCache.mu.RUnlock()
-
 	if !c.cfg.Cache.Enabled {
 		c.logger.Debug("cache.healthcare_service.get_healthcare_service.disabled", out.LogFields{
 			"healthcareServiceId": healthcareServiceID,
 		})
 		return nil, false
 	}
+
+	c.healthcareServiceCache.mu.RLock()
+	defer c.healthcareServiceCache.mu.RUnlock()
 
 	entry, exists := c.healthcareServiceCache.cache.Get(healthcareServiceID)
 	if !exists {
@@ -39,9 +39,6 @@ func (c *CacheAdapter) GetHealthcareService(ctx context.Context, healthcareServi
 }
 
 func (c *CacheAdapter) StoreHealthcareService(ctx context.Context, healthcareService domain.HealthcareService) {
-	c.healthcareServiceCache.mu.Lock()
-	defer c.healthcareServiceCache.mu.Unlock()
-
 	if !c.cfg.Cache.Enabled {
 		c.logger.Debug("cache.healthcare_service.store_healthcare_service.disabled", out.LogFields{
 			"healthcareServiceId": healthcareService.ID,
@@ -49,10 +46,20 @@ func (c *CacheAdapter) StoreHealthcareService(ctx context.Context, healthcareSer
 		return
 	}
 
+	c.healthcareServiceCache.mu.Lock()
+	defer c.healthcareServiceCache.mu.Unlock()
+
 	c.healthcareServiceCache.cache.Add(healthcareService.ID, &healthcareService)
 }
 
 func (c *CacheAdapter) InvalidateHealthcareServiceCache(ctx context.Context, healthcareServiceID string) {
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.healthcare_service.invalidate_healthcare_service.disabled", out.LogFields{
+			"healthcareServiceId": healthcareServiceID,
+		})
+		return
+	}
+
 	c.healthcareServiceCache.mu.Lock()
 	defer c.healthcareServiceCache.mu.Unlock()
 
@@ -60,6 +67,11 @@ func (c *CacheAdapter) InvalidateHealthcareServiceCache(ctx context.Context, hea
 }
 
 func (c *CacheAdapter) InvalidateAllHealthcareServiceCache(ctx context.Context) {
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.healthcare_service.invalidate_all_healthcare_service.disabled", out.LogFields{})
+		return
+	}
+
 	c.healthcareServiceCache.mu.Lock()
 	defer c.healthcareServiceCache.mu.Unlock()
 

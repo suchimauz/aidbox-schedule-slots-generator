@@ -12,10 +12,6 @@ import (
 // Кэширование слотов
 
 func (s *SlotGeneratorService) GetSlotsCache(ctx context.Context, scheduleID string, startTime time.Time, endTime time.Time, slotType domain.AppointmentType) ([]domain.Slot, bool) {
-	if s.cachePort == nil {
-		return []domain.Slot{}, false
-	}
-
 	return s.cachePort.GetSlots(ctx, scheduleID, startTime, endTime, slotType)
 }
 
@@ -74,59 +70,41 @@ func (s *SlotGeneratorService) InvalidateAppointmentCacheSlot(ctx context.Contex
 }
 
 func (s *SlotGeneratorService) InvalidateSlotsCache(ctx context.Context, scheduleID string) error {
-	if s.cachePort != nil {
-		s.cachePort.InvalidateSlotsCache(ctx, scheduleID)
-	}
+	s.cachePort.InvalidateSlotsCache(ctx, scheduleID)
 
 	return nil
 }
 
 func (s *SlotGeneratorService) InvalidateAllSlotsCache(ctx context.Context) error {
-	if s.cachePort != nil {
-		s.cachePort.InvalidateAllSlotsCache(ctx)
-	}
+	s.cachePort.InvalidateAllSlotsCache(ctx)
 
 	return nil
 }
 
 func (s *SlotGeneratorService) GetScheduleRuleCache(ctx context.Context, scheduleID string) (*domain.ScheduleRule, bool) {
-	if s.cachePort == nil {
-		return nil, false
-	}
-
 	scheduleRule, exists := s.cachePort.GetScheduleRule(ctx, scheduleID)
 	return scheduleRule, exists
 }
 
 func (s *SlotGeneratorService) StoreScheduleRuleCache(ctx context.Context, scheduleRule domain.ScheduleRule) (*domain.ScheduleRule, error) {
-	if s.cachePort != nil {
-		s.cachePort.StoreScheduleRule(ctx, scheduleRule)
-	}
+	s.cachePort.StoreScheduleRule(ctx, scheduleRule)
 
 	return &scheduleRule, nil
 }
 
 func (s *SlotGeneratorService) InvalidateScheduleRuleCache(ctx context.Context, scheduleID string) error {
-	if s.cachePort != nil {
-		s.cachePort.InvalidateScheduleRuleCache(ctx, scheduleID)
-	}
+	s.cachePort.InvalidateScheduleRuleCache(ctx, scheduleID)
 
 	return nil
 }
 
 func (s *SlotGeneratorService) InvalidateAllScheduleRuleCache(ctx context.Context) error {
-	if s.cachePort != nil {
-		s.cachePort.InvalidateAllScheduleRuleCache(ctx)
-	}
+	s.cachePort.InvalidateAllScheduleRuleCache(ctx)
 
 	return nil
 }
 
 func (s *SlotGeneratorService) GetScheduleRuleGlobalCache(ctx context.Context) (*domain.ScheduleRuleGlobal, bool) {
-	if s.cachePort == nil {
-		return nil, false
-	}
-
 	scheduleRuleGlobal, exists := s.cachePort.GetScheduleRuleGlobal(ctx)
 	if exists {
 		return scheduleRuleGlobal, true
@@ -136,9 +114,7 @@ func (s *SlotGeneratorService) GetScheduleRuleGlobalCache(ctx context.Context) (
 }
 
 func (s *SlotGeneratorService) StoreScheduleRuleGlobalCache(ctx context.Context, scheduleRuleGlobal domain.ScheduleRuleGlobal) (*domain.ScheduleRuleGlobal, error) {
-	if s.cachePort != nil {
-		s.cachePort.StoreScheduleRuleGlobal(ctx, scheduleRuleGlobal)
-	}
+	s.cachePort.StoreScheduleRuleGlobal(ctx, scheduleRuleGlobal)
 
 	return &scheduleRuleGlobal, nil
 }
@@ -148,34 +124,26 @@ func (s *SlotGeneratorService) InvalidateScheduleRuleGlobalCache(ctx context.Con
 }
 
 func (s *SlotGeneratorService) GetHealthcareServiceCache(ctx context.Context, healthcareServiceID string) (*domain.HealthcareService, bool) {
-	if s.cachePort == nil {
-		return nil, false
-	}
+	return nil, false
 
 	healthcareService, exists := s.cachePort.GetHealthcareService(ctx, healthcareServiceID)
 	return healthcareService, exists
 }
 
 func (s *SlotGeneratorService) StoreHealthcareServiceCache(ctx context.Context, healthcareService domain.HealthcareService) (*domain.HealthcareService, error) {
-	if s.cachePort != nil {
-		s.cachePort.StoreHealthcareService(ctx, healthcareService)
-	}
+	s.cachePort.StoreHealthcareService(ctx, healthcareService)
 
 	return &healthcareService, nil
 }
 
 func (s *SlotGeneratorService) InvalidateHealthcareServiceCache(ctx context.Context, healthcareServiceID string) error {
-	if s.cachePort != nil {
-		s.cachePort.InvalidateHealthcareServiceCache(ctx, healthcareServiceID)
-	}
+	s.cachePort.InvalidateHealthcareServiceCache(ctx, healthcareServiceID)
 
 	return nil
 }
 
 func (s *SlotGeneratorService) InvalidateAllHealthcareServiceCache(ctx context.Context) error {
-	if s.cachePort != nil {
-		s.cachePort.InvalidateAllHealthcareServiceCache(ctx)
-	}
+	s.cachePort.InvalidateAllHealthcareServiceCache(ctx)
 
 	return nil
 }

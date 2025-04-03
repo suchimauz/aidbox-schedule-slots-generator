@@ -24,15 +24,15 @@ type slotsCache struct {
 // Кэширование слотов
 
 func (c *CacheAdapter) GetSlotsCachedMeta(ctx context.Context, scheduleID string) (time.Time, time.Time, bool) {
-	c.slotsCache.mu.RLock()
-	defer c.slotsCache.mu.RUnlock()
-
 	if !c.cfg.Cache.Enabled {
 		c.logger.Debug("cache.slots.get_slots_cached_meta.disabled", out.LogFields{
 			"scheduleId": scheduleID,
 		})
 		return time.Time{}, time.Time{}, false
 	}
+
+	c.slotsCache.mu.RLock()
+	defer c.slotsCache.mu.RUnlock()
 
 	entry, cacheExists := c.slotsCache.cache.Get(scheduleID)
 	if cacheExists {
@@ -43,15 +43,15 @@ func (c *CacheAdapter) GetSlotsCachedMeta(ctx context.Context, scheduleID string
 }
 
 func (c *CacheAdapter) GetSlots(ctx context.Context, scheduleID string, startDate time.Time, endDate time.Time, slotType domain.AppointmentType) ([]domain.Slot, bool) {
-	c.slotsCache.mu.RLock()
-	defer c.slotsCache.mu.RUnlock()
-
 	if !c.cfg.Cache.Enabled {
 		c.logger.Debug("cache.slots.get_slots.disabled", out.LogFields{
 			"scheduleId": scheduleID,
 		})
 		return []domain.Slot{}, false
 	}
+
+	c.slotsCache.mu.RLock()
+	defer c.slotsCache.mu.RUnlock()
 
 	entry, cacheExists := c.slotsCache.cache.Get(scheduleID)
 	if cacheExists {
@@ -76,15 +76,15 @@ func (c *CacheAdapter) GetSlots(ctx context.Context, scheduleID string, startDat
 }
 
 func (c *CacheAdapter) GetSlotByAppointment(ctx context.Context, scheduleID string, appointment domain.Appointment) (domain.Slot, bool) {
-	c.slotsCache.mu.RLock()
-	defer c.slotsCache.mu.RUnlock()
-
 	if !c.cfg.Cache.Enabled {
 		c.logger.Debug("cache.slots.get_slot_by_appointment.disabled", out.LogFields{
 			"scheduleId": scheduleID,
 		})
 		return domain.Slot{}, false
 	}
+
+	c.slotsCache.mu.RLock()
+	defer c.slotsCache.mu.RUnlock()
 
 	entry, cacheExists := c.slotsCache.cache.Get(scheduleID)
 	if cacheExists {
@@ -111,14 +111,17 @@ func (c *CacheAdapter) GetSlotByAppointment(ctx context.Context, scheduleID stri
 }
 
 func (c *CacheAdapter) StoreSlots(ctx context.Context, scheduleID string, startDate time.Time, endDate time.Time, slots []domain.Slot) {
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.slots.store_slots.disabled", out.LogFields{
+			"scheduleId": scheduleID,
+		})
+		return
+	}
+
 	c.slotsCache.mu.Lock()
 	defer c.slotsCache.mu.Unlock()
 
 	if len(slots) == 0 {
-		return
-	}
-
-	if !c.cfg.Cache.Enabled {
 		return
 	}
 
@@ -156,12 +159,15 @@ func (c *CacheAdapter) StoreSlots(ctx context.Context, scheduleID string, startD
 
 // Обновление слотов если они уже есть в кэше
 func (c *CacheAdapter) UpdateSlot(ctx context.Context, scheduleID string, slot domain.Slot) {
-	c.slotsCache.mu.Lock()
-	defer c.slotsCache.mu.Unlock()
-
 	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.slots.update_slot.disabled", out.LogFields{
+			"scheduleId": scheduleID,
+		})
 		return
 	}
+
+	c.slotsCache.mu.Lock()
+	defer c.slotsCache.mu.Unlock()
 
 	entry, exists := c.slotsCache.cache.Get(scheduleID)
 	if !exists {
@@ -175,6 +181,13 @@ func (c *CacheAdapter) UpdateSlot(ctx context.Context, scheduleID string, slot d
 }
 
 func (c *CacheAdapter) InvalidateSlotsCache(ctx context.Context, scheduleID string) {
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.slots.invalidate_slots.disabled", out.LogFields{
+			"scheduleId": scheduleID,
+		})
+		return
+	}
+
 	select {
 	case <-ctx.Done():
 		c.logger.Debug("cache.invalidate_slots.context_canceled", out.LogFields{
@@ -191,6 +204,11 @@ func (c *CacheAdapter) InvalidateSlotsCache(ctx context.Context, scheduleID stri
 }
 
 func (c *CacheAdapter) InvalidateAllSlotsCache(ctx context.Context) {
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.slots.invalidate_all_slots.disabled", out.LogFields{})
+		return
+	}
+
 	c.slotsCache.mu.Lock()
 	defer c.slotsCache.mu.Unlock()
 

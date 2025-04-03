@@ -23,7 +23,10 @@ func NewCacheAdapter(cfg *config.Config, logger out.LoggerPort) (*CacheAdapter, 
 		logger.Info("cache.disabled", out.LogFields{
 			"message": "Cache is disabled",
 		})
-		return nil, nil
+		return &CacheAdapter{
+			cfg:    cfg,
+			logger: logger.WithModule("CacheAdapter"),
+		}, nil
 	}
 
 	lruSlotsCache, err := lru.New[string, *slotsCacheEntry](cfg.Cache.SlotsSize)

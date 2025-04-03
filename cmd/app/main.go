@@ -52,16 +52,12 @@ func main() {
 	// Инициализация адаптеров
 	aidboxAdapter := aidbox.NewAidboxAdapter(cfg, logger.WithModule("AidboxAdapter"))
 
-	var cacheAdapter out.CachePort
-	if cfg.Cache.Enabled {
-		var err error
-		cacheAdapter, err = cache.NewCacheAdapter(cfg, logger.WithModule("CacheAdapter"))
-		if err != nil {
-			logger.Error("app.cache.init_failed", out.LogFields{
-				"error": err.Error(),
-			})
-			os.Exit(1)
-		}
+	cacheAdapter, err := cache.NewCacheAdapter(cfg, logger.WithModule("CacheAdapter"))
+	if err != nil {
+		logger.Error("app.cache.init_failed", out.LogFields{
+			"error": err.Error(),
+		})
+		os.Exit(1)
 	}
 
 	// Инициализация сервиса

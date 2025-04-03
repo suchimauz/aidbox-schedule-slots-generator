@@ -17,15 +17,15 @@ type scheduleRuleCache struct {
 // Кэширование расписаний
 
 func (c *CacheAdapter) GetScheduleRule(ctx context.Context, scheduleID string) (*domain.ScheduleRule, bool) {
-	c.scheduleRuleCache.mu.RLock()
-	defer c.scheduleRuleCache.mu.RUnlock()
-
 	if !c.cfg.Cache.Enabled {
 		c.logger.Debug("cache.schedule_rule.get_schedule_rule.disabled", out.LogFields{
 			"scheduleId": scheduleID,
 		})
 		return nil, false
 	}
+
+	c.scheduleRuleCache.mu.RLock()
+	defer c.scheduleRuleCache.mu.RUnlock()
 
 	entry, exists := c.scheduleRuleCache.cache.Get(scheduleID)
 	if !exists {
@@ -39,9 +39,6 @@ func (c *CacheAdapter) GetScheduleRule(ctx context.Context, scheduleID string) (
 }
 
 func (c *CacheAdapter) StoreScheduleRule(ctx context.Context, scheduleRule domain.ScheduleRule) {
-	c.scheduleRuleCache.mu.Lock()
-	defer c.scheduleRuleCache.mu.Unlock()
-
 	if !c.cfg.Cache.Enabled {
 		c.logger.Debug("cache.schedule_rule.store_schedule_rule.disabled", out.LogFields{
 			"scheduleId": scheduleRule.ID,
@@ -49,10 +46,18 @@ func (c *CacheAdapter) StoreScheduleRule(ctx context.Context, scheduleRule domai
 		return
 	}
 
+	c.scheduleRuleCache.mu.Lock()
+	defer c.scheduleRuleCache.mu.Unlock()
+
 	c.scheduleRuleCache.cache.Add(scheduleRule.ID, &scheduleRule)
 }
 
 func (c *CacheAdapter) InvalidateScheduleRuleCache(ctx context.Context, scheduleID string) {
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.schedule_rule_global.invalidate_schedule_rule.disabled", nil)
+		return
+	}
+
 	c.scheduleRuleCache.mu.Lock()
 	defer c.scheduleRuleCache.mu.Unlock()
 
@@ -60,6 +65,11 @@ func (c *CacheAdapter) InvalidateScheduleRuleCache(ctx context.Context, schedule
 }
 
 func (c *CacheAdapter) InvalidateAllScheduleRuleCache(ctx context.Context) {
+	if !c.cfg.Cache.Enabled {
+		c.logger.Debug("cache.schedule_rule_global.invalidate_all_schedule_rule.disabled", nil)
+		return
+	}
+
 	c.scheduleRuleCache.mu.Lock()
 	defer c.scheduleRuleCache.mu.Unlock()
 
