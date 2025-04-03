@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,15 +34,35 @@ func NewSlotGeneratorService(
 	}
 }
 
-func (s *SlotGeneratorService) prepareResponseSlots(debugInfo *SlotGeneratorServiceDebug, slots []domain.Slot, request in.GenerateSlotsRequest) map[domain.AppointmentType][]domain.Slot {
+func (s *SlotGeneratorService) prepareResponseSlots(debugInfo *SlotGeneratorServiceDebug, slots []domain.Slot, request in.GenerateSlotsRequest, startTime time.Time, endTime time.Time) map[domain.AppointmentType][]domain.Slot {
 	routineSlots := make([]domain.Slot, 0)
 	walkinSlots := make([]domain.Slot, 0)
+
+	splitted_channels := strings.Split(request.Channels, ",")
+	has_freg_channel := false
+	for _, channel := range splitted_channels {
+		if channel == "freg" {
+			has_freg_channel = true
+			break
+		}
+	}
 
 	// В ответе разделяем слоты по их типу
 	// Например:
 	// ROUTINE: [slot1, slot2, slot3]
 	// WALKIN: [slot4, slot5, slot6]
 	for _, slot := range slots {
+		// Если есть freg канал, то мы пропускаем этот слот если его дата начала меньше чем startTime + 1 день
+		// freg канал - это канал для других МО
+		if has_freg_channel {
+			startOverlapping := slot.StartTime.Before(endTime)
+			endOverlapping := slot.EndTime.After(startTime.AddDate(0, 0, 1))
+
+			if !(startOverlapping && endOverlapping) {
+				continue
+			}
+		}
+
 		if slot.SlotType == domain.AppointmentTypeRoutine {
 			// Проверяем, доступен ли слот по каналам
 			if isChannelAvailable(slot.Channel, request.Channels) {
@@ -195,9 +216,13 @@ func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, request in.Gen
 
 	// Добавляем только те слоты, которые начинаются после startTime
 	for _, slot := range slots {
-		startOverlapping := slot.StartTime.After(startTime)
-		endOverlapping := slot.EndTime.Before(endTime)
-		if startOverlapping && endOverlapping {
+		if slot.SlotType == domain.AppointmentTypeRoutine {
+			startOverlapping := slot.StartTime.After(startTime)
+			endOverlapping := slot.EndTime.Before(endTime)
+			if startOverlapping && endOverlapping {
+				returnSlots = append(returnSlots, slot)
+			}
+		} else if slot.SlotType == domain.AppointmentTypeWalkin {
 			returnSlots = append(returnSlots, slot)
 		}
 	}
@@ -213,7 +238,7 @@ func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, request in.Gen
 	apply_50_percent_rule_debug.Elapse()
 	debugInfo.AddDebugInfo(apply_50_percent_rule_debug)
 
-	return s.prepareResponseSlots(&debugInfo, returnSlots, request), debugInfo.data, nil
+	return s.prepareResponseSlots(&debugInfo, returnSlots, request, startTime, endTime), debugInfo.data, nil
 }
 
 func (s *SlotGeneratorService) generateRangeSlotsForSchedule(ctx context.Context, debugInfo *SlotGeneratorServiceDebug, schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, startTime time.Time, endTime time.Time, slotDuration time.Duration, mu *sync.Mutex, wg *sync.WaitGroup) ([]domain.Slot, []domain.Slot, error) {
@@ -258,7 +283,7 @@ func (s *SlotGeneratorService) generateRangeSlotsForSchedule(ctx context.Context
 
 	generate_walkin_slots_debug.Start()
 	var walkinSlots []domain.Slot
-	s.generateWalkinSlots(schedule, scheduleRuleGlobal, appointments, &walkinSlots, mu, wg)
+	s.generateWalkinSlots(schedule, scheduleRuleGlobal, appointments, &walkinSlots, &routineSlots, mu, wg)
 	wg.Wait()
 	generate_walkin_slots_debug.Elapse()
 	generate_walkin_slots_debug.AddOption("walkinSlotsCount", strconv.Itoa(len(walkinSlots)))

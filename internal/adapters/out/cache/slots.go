@@ -66,12 +66,6 @@ func (c *CacheAdapter) GetSlots(ctx context.Context, scheduleID string, startDat
 				slot.InCache = true
 				if startOverlapping && endOverlapping {
 					slots = append(slots, slot)
-				} else {
-					c.logger.Info("slots.get.slot", out.LogFields{
-						"slot":      slot,
-						"startDate": startDate,
-						"endDate":   endDate,
-					})
 				}
 			}
 			return slots, true
@@ -97,11 +91,17 @@ func (c *CacheAdapter) GetSlotByAppointment(ctx context.Context, scheduleID stri
 		slotsMap, slotsMapExists := entry.Slots[appointment.Type]
 		if slotsMapExists {
 			for _, slot := range slotsMap {
-				startOverlapping := appointment.EndDate.Date.After(slot.StartTime)
-				endOverlapping := appointment.StartDate.Date.Before(slot.EndTime)
-				slot.InCache = true
-				if startOverlapping && endOverlapping {
-					return slot, true
+				if slot.SlotType == domain.AppointmentTypeRoutine {
+					startOverlapping := appointment.EndDate.Date.After(slot.StartTime)
+					endOverlapping := appointment.StartDate.Date.Before(slot.EndTime)
+					slot.InCache = true
+					if startOverlapping && endOverlapping {
+						return slot, true
+					}
+				} else if slot.SlotType == domain.AppointmentTypeWalkin {
+					if slot.StartTime.Equal(appointment.StartDate.Date) {
+						return slot, true
+					}
 				}
 			}
 		}

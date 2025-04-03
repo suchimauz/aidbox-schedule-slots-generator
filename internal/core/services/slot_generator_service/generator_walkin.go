@@ -8,14 +8,14 @@ import (
 	"github.com/suchimauz/aidbox-schedule-slots-generator/internal/utils"
 )
 
-func (s *SlotGeneratorService) generateWalkinSlots(schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, slots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
+func (s *SlotGeneratorService) generateWalkinSlots(schedule *domain.ScheduleRule, scheduleRuleGlobal *domain.ScheduleRuleGlobal, appointments []domain.Appointment, walkinSlots *[]domain.Slot, routineSlots *[]domain.Slot, mu *sync.Mutex, wg *sync.WaitGroup) {
 	if schedule.OverbookingCount == 0 {
 		return
 	}
 
 	uniqueDaysMap := make(map[time.Time]struct{})
 
-	for _, slot := range *slots {
+	for _, slot := range *routineSlots {
 		if slot.SlotType == domain.AppointmentTypeRoutine {
 			uniqueDaysMap[slot.StartTime.Truncate(24*time.Hour)] = struct{}{}
 		}
@@ -23,7 +23,7 @@ func (s *SlotGeneratorService) generateWalkinSlots(schedule *domain.ScheduleRule
 
 	for day := range uniqueDaysMap {
 		wg.Add(1)
-		go s.generateWalkinSlot(schedule, scheduleRuleGlobal, appointments, day, slots, mu, wg)
+		go s.generateWalkinSlot(schedule, scheduleRuleGlobal, appointments, day, walkinSlots, mu, wg)
 	}
 }
 
