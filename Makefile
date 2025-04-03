@@ -42,10 +42,13 @@ compose-build:
 	docker-compose up --remove-orphans aidbox_schedule_slots_generator_builder
 
 compose-build-force:
-	docker-compose up --build aidbox_schedule_slots_generator_builder
+	docker-compose up --build --remove-orphans aidbox_schedule_slots_generator_builder
 
 compose-run: compose-build
 	docker-compose up --remove-orphans aidbox_schedule_slots_generator_runner
+
+compose-run-force: compose-build-force
+	docker-compose up --build --remove-orphans aidbox_schedule_slots_generator_runner
 
 
 # Вспомогательная команда для просмотра конфигурации
