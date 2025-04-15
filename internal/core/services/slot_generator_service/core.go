@@ -154,6 +154,12 @@ func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, request in.Gen
 		startTime = schedule.PlanningHorizon.Start.Date
 	}
 
+	// Если передан параметр full_day, это означает что нужно сгенерировать слоты на весь день
+	if request.FullDay {
+		// Проставляем начало startTime
+		startTime = utils.StartCurrentDay(startTime)
+	}
+
 	generateStartTime := utils.StartCurrentDay(startTime)
 
 	// Вычисляем длительность слота
@@ -196,6 +202,14 @@ func (s *SlotGeneratorService) GenerateSlots(ctx context.Context, request in.Gen
 		planningEndTime = schedule.PlanningHorizon.End.Date
 	}
 	endTime = utils.StartNextDay(planningEndTime)
+
+	// Проверяем, передан ли конец периода
+	if !request.EndDate.IsZero() {
+		// Если конец периода передан и он меньше чем планируемый конец периода, то используем его
+		if request.EndDate.Before(endTime) {
+			endTime = request.EndDate
+		}
+	}
 
 	s.logger.Info("slots.generate.planning_time_range", out.LogFields{
 		"planningEndTime": planningEndTime,
