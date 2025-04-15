@@ -101,10 +101,12 @@ func (s *SlotGeneratorService) prepareResponseSlots(debugInfo *SlotGeneratorServ
 	// И возвращаем только нужные слоты
 	// Walkin слоты не возвращаем, т.к. они не нужны при данном варианте
 	if request.SlotsCount != -1 {
-		routineSlots = routineSlots[:request.SlotsCount]
+		if len(routineSlots) > request.SlotsCount {
+			routineSlots = routineSlots[:request.SlotsCount]
+		}
 
 		return map[domain.AppointmentType][]domain.Slot{
-			domain.AppointmentTypeRoutine: routineSlots[:request.SlotsCount],
+			domain.AppointmentTypeRoutine: routineSlots,
 		}
 	}
 
